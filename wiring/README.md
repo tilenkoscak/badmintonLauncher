@@ -9,9 +9,9 @@ so a subsystem is proven on the ESP32 before the next one is connected.
 |---|---|---|
 | `01-esp32-s3-basics.md` | The ESP32-S3 board itself: which pins may be used, power, Arduino IDE setup | Draft. Board photo pending |
 | `02-steppers-drv8825.md` | Pan, tilt and feeder steppers (Sidewinder X3 Plus motors) through DRV8825 on 24 V | Draft. Motor labels pending |
-| `03-servos.md` | The two Miuzei 15 kg feeder servos | Draft. Regulator marking and feed roles pending |
-| `04-launch-wheels-dc-motors.md` | The two 775 motors on the 24 V rail: buck, series diode, MOSFET module, TVS | Draft. Four connection details to confirm |
-| `05-power.md` | The Artillery dual-output PSU, rails, grounding, switching | Draft. PSU label and buck variant pending |
+| `03-servos.md` | The two Miuzei 15 kg feeder servos | Draft. Feed roles pending |
+| `04-launch-wheels-dc-motors.md` | The two 775 motors: buck, MOSFET module with buffer and TVS, flyback diode | Draft. Rail voltage decision pending (24 V today, 12 V recommended) |
+| `05-power.md` | The Artillery dual-output PSU, rails, grounding, switching | Draft. PSU label and buck decision pending |
 | `06-optical-endstop.md` | The salvaged optical endstop: logic, 3.3 V, homing | Draft. Role pending |
 | `pin-map.md` | One table with every GPIO in use | Draft v0.2 |
 
@@ -35,7 +35,7 @@ collected in the checklist at the end of `PARTS.md`.
 
    Power: Artillery X3 Plus PSU
      output 1  24 V / 4.2 A ─► DRV8825 VMOT ×3, N7805 ─► 5 V ESP32, servo buck ─► 5–6 V servos
-     output 2  36 V / 9.7 A ─► buck ─► 24 V wheel rail ─► [E-STOP] ─► fuse ─► E83-004 ─► MOSFET module ─► 775
+     output 2  36 V / 9.7 A ─► buck (24 V today, 12 V recommended) ─► [E-STOP] ─► fuse ─► MOSFET module ─► 775 (+E83-004 flyback)
    All grounds meet at one star point. Motor current never passes through the ESP32 board.
 ```
 
@@ -56,8 +56,9 @@ collected in the checklist at the end of `PARTS.md`.
    the number used in code.
 7. **Keep motor wires away from signal wires** and away from the ESP32's Wi-Fi antenna.
    Twist each motor's wire pair. The 775 wires carry big, noisy currents.
-8. **The wheel rail is 24 V for 12 V motors.** The firmware duty cap is a safety feature, not
-   a tuning parameter. Never test the wheels with a sketch that lacks it.
+8. **The wheel rail is 24 V for 12 V motors until the buck is swapped for a 12 V one.** While
+   it is, the firmware duty cap is a safety feature, not a tuning parameter. Never test the
+   wheels with a sketch that lacks it.
 9. **Wire one subsystem at a time** and run its smoke test before adding the next.
 10. **Guard the launch wheels.** Never test them with the disks mounted until the driver and
     e-stop are proven with bare motor shafts.

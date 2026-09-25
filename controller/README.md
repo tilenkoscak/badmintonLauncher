@@ -47,8 +47,8 @@ controller/
 | No external resources in the UI | Everything inline, no CDN, no web fonts | The phone has **no internet** while connected to the robot |
 | Framework | Arduino (arduino-esp32 core 3.x) | Tilen already knows Arduino |
 | Libraries (candidates) | `ESPAsyncWebServer` + `AsyncTCP` (ESP32Async forks) for HTTP + WebSocket · `FastAccelStepper` (hardware-timed) or `AccelStepper` for steppers · `ESP32Servo` · built-in LEDC for wheel PWM | To be confirmed when the firmware skeleton is started |
-| Wheel duty cap | `WHEEL_MAX_DUTY` ≈ 50 %, a compile-time constant the UI cannot exceed. UI "100 %" maps to the cap | The wheel rail is 24 V, the 775 motors are 12 V (`wiring/04-launch-wheels-dc-motors.md`) |
-| Wheel PWM frequency | `WHEEL_PWM_HZ`, 1 kHz to start, then 10–16 kHz, never above 20 kHz | Limit of the MOSFET modules |
+| Wheel duty cap | `WHEEL_MAX_DUTY` ≈ 50 % while the wheel rail is 24 V, 100 % once a 12 V buck is fitted. A compile-time constant the UI cannot exceed; UI "100 %" maps to the cap | The 775 motors are 12 V (`wiring/04-launch-wheels-dc-motors.md`) |
+| Wheel PWM frequency | `WHEEL_PWM_HZ` ≈ 16 kHz (10 kHz if the modules run hot), never above 20 kHz | Limit of the MOSFET modules; high frequency keeps current ripple low |
 | Homing | Optical endstop (from the printer) on one axis, second endstop to be added; active level is a constant `LIMIT_ACTIVE_LEVEL` | `wiring/06-optical-endstop.md` |
 
 ## Decisions still open

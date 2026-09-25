@@ -10,9 +10,7 @@
 | Servo B | GPIO 11 |
 
 > ❓ **OPEN:** Before this page is final I need the feed-cycle roles and angles of servo A and
-> servo B (`PARTS.md` #4), and confirmation that the MEAN WELL regulator on the bench is an
-> N78**05** (5 V). The servos are rated to 7.4 V maximum, so the "12 V" from the prototype
-> notes cannot be what reaches them.
+> servo B (`PARTS.md` #4).
 
 ## What changes compared with the Uno
 
@@ -27,9 +25,9 @@
 ## Power
 
 The prototype feeds the servos from the 24 V rail through a **MEAN WELL N7805-1CW**
-(5 V, **1 A**). Two 15 kg servos can pull several amps for a moment; when they do, the N7805's
-overload protection drops the rail and the servos twitch. Recommended split, see
-`05-power.md`:
+(5 V, **1 A**; confirmed to be the 5 V part, which is right for these servos). Two 15 kg
+servos can pull several amps for a moment; when they do, the N7805's overload protection
+drops the rail and the servos twitch. Recommended split, see `05-power.md`:
 
 | Consumer | Supply |
 |---|---|

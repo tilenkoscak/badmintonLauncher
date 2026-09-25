@@ -15,7 +15,7 @@ Owner: Tilen. Language of code, comments and docs: English.
 | Pan (rotate left/right) | NEMA 17 stepper (Sidewinder Z-axis motor) | DRV8825 on 24 V |
 | Tilt (up/down) | NEMA 17 stepper (Sidewinder Z-axis motor) | DRV8825 on 24 V |
 | Feeder (drops one shuttle into the wheels) | 2 × Miuzei 15 kg digital servos + 1 NEMA 17 stepper | ESP32 PWM, 5–6 V servo rail; DRV8825 on 24 V |
-| Launch wheels (two counter-rotating disks) | 2 × 775 brushed DC motors, 12 V, 150 W, 10 000 rpm | 36 V → 24 V buck, series Schottky, 15 A low-side MOSFET PWM module per wheel |
+| Launch wheels (two counter-rotating disks) | 2 × 775 brushed DC motors, 12 V, 150 W, 10 000 rpm | Buck from the 36 V output (24 V today, 12 V recommended), 15 A low-side MOSFET PWM module per wheel with 1000 µF + TVS on its input, E83-004 Schottky flyback across each motor |
 
 Every subsystem works **individually** on the Uno prototype. Nothing is integrated yet;
 that integration (one controller + one UI) is the goal of this repo.
@@ -39,9 +39,11 @@ that integration (one controller + one UI) is the goal of this repo.
   on the header. Also avoid strapping pins 0, 3, 45, 46, the USB pins 19/20 and UART0 pins 43/44.
 - Power comes from the Artillery PSU: **24 V / 4.2 A** (steppers, ESP32 via a MEAN WELL N7805,
   servo buck) and **36 V / 9.7 A** → buck → **24 V wheel rail**. The robot is mains-powered.
-- **The wheel rail is 24 V but the 775 motors are 12 V.** Firmware enforces a hard duty cap
-  `WHEEL_MAX_DUTY` (≈ 50 %) that the UI cannot exceed. This is a safety constant, not a
-  setting, until the buck is replaced by a 12 V one.
+- **The wheel rail is currently 24 V but the 775 motors are 12 V.** Recommended fix: replace
+  the buck with the 12 V / 30 A module of the same family (decision pending, `PARTS.md` #7).
+  Until then firmware enforces a hard duty cap `WHEEL_MAX_DUTY` (≈ 50 %) that the UI cannot
+  exceed. This is a safety constant, not a setting. Wheel PWM runs near the module limit
+  (`WHEEL_PWM_HZ` ≈ 16 kHz) to keep current ripple low on either rail.
 - The N7805 delivers 1 A. The ESP32 gets it alone; the servos get their own ≥ 3 A buck.
   The ESP32 must never share a regulator with the servos (brown-out resets).
 - Phone ↔ robot link is **Wi-Fi**: the ESP32 runs as an access point and serves the web app.
@@ -72,7 +74,8 @@ that integration (one controller + one UI) is the goal of this repo.
 - [x] Prototype mechanics and all subsystems working individually on Arduino Uno
 - [x] Repo skeleton, parts list, first draft of wiring docs and pin map
 - [x] Component specs collected: PSU, buck, wheel power chain, servos, N7805, optical endstop
-- [ ] Resolve the remaining `OPEN:` questions (mostly confirmations: labels, orientations, measurements)
+- [ ] Decide on the wheel buck: 12 V / 30 A replacement (recommended) or keep 24 V with the duty cap
+- [ ] Resolve the remaining `OPEN:` questions (mostly confirmations: labels, measurements, feed sequence)
 - [ ] Final pin map and wiring diagrams
 - [ ] ESP32 firmware skeleton: Wi-Fi AP, web server, WebSocket, motor drivers
 - [ ] Web app v1: manual control of every axis, wheel speed, feed button, e-stop
