@@ -1,68 +1,84 @@
 # 05 · Power distribution
 
-**Status: blocked** on the power supply specification. The structure below is what the
-finished robot will need regardless of the exact supply; the numbers are estimates.
+Draft based on the salvaged **Artillery Sidewinder X3 Plus** power supply, which has two
+outputs: **24 V / 4.2 A** and **36 V / 9.7 A**. The robot is mains-powered.
 
-> ❓ **OPEN:** Before I can finish this page I need the supply's voltage and current rating,
-> its type (bench PSU, brick, LED PSU, battery) and whether the robot must run from a battery
-> on court (`PARTS.md` #7). I also need the servo model (#4) to fix the servo rail voltage and
-> the confirmed 775 driver (#6) to fix the fuse ratings.
+> ❓ **OPEN:** Before I mark this page final I need (see `PARTS.md` #6, #7): the PSU model
+> label, whether the negatives of the two outputs are already connected inside the PSU, the
+> buck converter's current variant and measured output voltage, and confirmation of the
+> N7805 marking.
 
-## Power tree (planned)
+## Power tree
 
 ```
-  Mains adapter / bench PSU / battery
-             │  12 V
-             ▼
-   ┌─────────────────┐   MOTOR SWITCH / E-STOP        FUSE 15–20 A      775 driver L ──► 775 motor L
-   │  12 V supply    ├──────────/ ──────┬──────────────[====]──────────►
-   │  (?? A)         │                  ├──────────────[====]──────────►  775 driver R ──► 775 motor R
-   └───────┬─────────┘                  │            FUSE 15–20 A
-           │                            │
-           │                            ├────── FUSE 5 A ───────────────►  DRV8825 VMOT ×3 (+100 µF each)
-           │                            │
-           │                            └────► 5 V buck ≥ 3 A ──(+1000 µF)──►  servo rail → servo A, servo B
-           │
-           └────────────────────────────────► 5 V buck ≥ 1 A ───────────────►  ESP32 `5V` pin
-                                                                                (USB from the PC while developing)
+ Mains 230 V ──► Artillery X3 Plus PSU
+                  │
+                  ├── OUTPUT 1: 24 V / 4.2 A ──────────────────────────────────────── "aim & feed rail"
+                  │      ├──► DRV8825 pan   VMOT  (100 µF/50 V on the driver)
+                  │      ├──► DRV8825 tilt  VMOT
+                  │      ├──► DRV8825 feed  VMOT
+                  │      ├──► MEAN WELL N7805-1CW ──► 5 V / 1 A ──► ESP32 `5V` pin        (recommended use)
+                  │      └──► 5–6 V buck ≥ 3 A (to add) ──(+1000 µF)──► servo A, servo B
+                  │
+                  └── OUTPUT 2: 36 V / 9.7 A ──► buck 36 → 24 V (IP68) ──► [ E-STOP / WHEEL SWITCH ]
+                                                                               │
+                                                        ┌──────────────────────┴──────────────────────┐
+                                                        │ fuse 10 A                                   │ fuse 10 A
+                                                        ▼                                             ▼
+                                                  E83-004 (series)                              E83-004 (series)
+                                                        ▼                                             ▼
+                                                  MOSFET module L  ◄─ PWM GPIO 12             MOSFET module R  ◄─ PWM GPIO 13
+                                                        ▼                                             ▼
+                                                  775 motor L (+TVS, +flyback)                  775 motor R (+TVS, +flyback)
 
-   GROUND: one star point at the supply. Each branch (wheel L, wheel R, steppers, servo buck,
-   ESP32 buck) has its own wire back to the star. The ESP32's GND pins connect only to the
-   star and to the drivers' logic-GND pins.
+ GROUND: one star point next to the PSU. Output 1 −, output 2 −, buck −, both MOSFET module DC−,
+ the DRV8825 motor grounds and the ESP32 GND each get their own wire to that point.
 ```
 
-Why the ESP32 sits **before** the motor switch: pressing E-STOP must kill the wheels,
-steppers and servos while the ESP32 stays alive, so the phone keeps its connection and the
-app can show "E-STOP pressed" instead of just going dark.
+What the prototype already does: output 1 feeds the steppers and the N7805 → servos;
+output 2 feeds the buck → wheels. What changes for the ESP32 build: the ESP32 needs its own
+5 V (proposal: the N7805), the servos get a stronger 5–6 V buck, and the wheel rail gets a
+switch and fuses.
 
-## Rails
+## Rails and budget
 
-| Rail | Voltage | Feeds | Estimated current |
-|---|---|---|---|
-| Motor rail | 12 V | 775 motors, DRV8825 VMOT | 2 × 12.5 A at rated load, briefly far more at spin-up; steppers up to ~1.5 A each from VMOT (actual supply draw is lower thanks to the chopper) |
-| Servo rail | 5 V (6 V if the servos allow it, more torque) | 2 servos | 0.5 A idle, 2–5 A during stalls, depending on model |
-| Logic rail | 5 V into the ESP32 board, 3.3 V out of its LDO | ESP32, DRV8825 logic (RESET/SLEEP, pull-ups) | ≤ 0.6 A |
+| Rail | Voltage | Source | Feeds | Estimated draw | Available |
+|---|---|---|---|---|---|
+| Aim & feed rail | 24 V | PSU output 1 | 3 × DRV8825, N7805, servo buck | Steppers ≈ 1.5–3 A from the supply (the chopper drivers draw less than the phase current), servo buck ≤ 1 A, N7805 ≈ 0.15 A ⇒ **≈ 3–4 A** | 4.2 A. Tight if all three steppers are set to 1.7 A; set the feeder lower |
+| Wheel rail | 24 V | PSU output 2 via buck | 2 × MOSFET module → 775 motors | 2 × ≈ 6 A average at full 150 W and 50 % duty; much more for a fraction of a second at spin-up | **≈ 13 A total** (350 W × ~90 % / 24 V), whatever the buck variant says |
+| ESP32 | 5 V | N7805 | ESP32 board only | ≤ 0.6 A | 1 A |
+| Servo rail | 5 V (6 V if the buck allows) | new buck | 2 × Miuzei 15 kg | ≈ 0.5 A idle, 2–3 A per servo when stalled | ≥ 3 A recommended |
 
-Preliminary supply size: **12 V, 30 A (360 W)** mains supply, or a **3S Li-ion / LiPo pack**
-(11.1–12.6 V) with a BMS and connectors rated ≥ 40 A if the robot must be portable.
-Battery voltage sag directly changes wheel speed, which is one reason to add RPM feedback later.
+The 24 V wheel rail with 12 V motors is the reason for the firmware's `WHEEL_MAX_DUTY` cap
+(≈ 50 %), see `04-launch-wheels-dc-motors.md`.
 
 ## Rules
 
-- **Power-up order:** ESP32 first, then the motor switch. Power-down: motor switch first.
-  The pull-up on stepper ENABLE and pull-downs on wheel PWM (see `pin-map.md`) cover the
-  case where this order is not respected.
-- **Never route motor current through the ESP32 board** or through a breadboard. Breadboard
-  rails are good for ~1 A; 775 currents melt them.
-- **Capacitors:** 100 µF at every DRV8825, ≥ 1000 µF at the servo rail, whatever the 775
-  driver module recommends at its input (a BTS7960 module likes 470–1000 µF nearby).
-- **Fuses** on each 775 branch and on the stepper branch. Ratings to be confirmed after
-  measuring real currents.
-- **Wire gauge:** ≥ 1.5 mm² for the wheel branches and the main 12 V feed (2.5 mm² if the
-  run is long), 0.5 mm² is enough for steppers and servos, signal wires can be thin.
-- **Soft start** for the 775 motors in firmware keeps the supply from tripping its
-  over-current protection at start-up.
-- **Brown-out:** if the ESP32 resets when motors start, its 5 V supply is sagging. Separate
-  buck, shorter/thicker ground, more capacitance.
-- **Battery monitoring** (if battery): a resistor divider from the 12 V rail to an ADC1 pin
-  (GPIO 1–10) lets the app show battery voltage. Not for v1.
+- **Power-up order:** ESP32 first (its 5 V comes straight from output 1, so it is up as soon
+  as the PSU is), then the wheel switch. Power-down in reverse. The pull-up on stepper
+  ENABLE and the pull-downs on the wheel PWM lines (`pin-map.md`) cover the case where this
+  order is not respected.
+- **E-STOP / wheel switch** sits between the buck and the two wheel branches and must be
+  reachable without a hand near the disks. It cuts only the wheel rail; the ESP32 stays alive
+  so the phone keeps its connection and the app can show "wheel power off". Steppers and
+  servos are stopped by firmware. Optional later: a relay on the 24 V aim & feed rail driven
+  by the ESP32.
+- **Never route motor current through the ESP32 board** or through a breadboard.
+- **Common ground, once.** Both PSU outputs, the buck and the ESP32 meet at the star point.
+  If the multimeter shows the two PSU negatives already connected, still run separate wires to
+  the star; just do not be surprised by the continuity.
+- **Series diode heat:** each E83-004 dissipates 3–4 W at full wheel power. Bolt both to a
+  heatsink with insulating washers (the tab is the cathode).
+- **Buffer capacitors:** 100 µF at every DRV8825 (fitted), 1000 µF across each MOSFET
+  module's **input** DC+/DC− (move them there if they are across the motor today, see
+  `PARTS.md` #10), 470–1000 µF on the servo rail.
+- **Soft start** for the 775 motors in firmware, and start the second wheel a moment after
+  the first, so the buck and PSU output 2 do not see two stall currents at the same instant.
+- **Fuses:** 10 A automotive blade per wheel branch as a starting point; optional 4 A in the
+  stepper feed. Confirm after measuring real currents.
+- **Wire gauge:** ≥ 1.5 mm² for the wheel branches and the buck leads, 0.5 mm² for
+  steppers and servos, anything for signals.
+- **Brown-out:** if the ESP32 resets when motors start, its 5 V is sagging. That is the
+  reason it gets the N7805 for itself.
+- **The buck is non-isolated**: its input − and output − are the same node. Fine, because
+  everything shares the star ground anyway.

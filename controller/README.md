@@ -47,6 +47,9 @@ controller/
 | No external resources in the UI | Everything inline, no CDN, no web fonts | The phone has **no internet** while connected to the robot |
 | Framework | Arduino (arduino-esp32 core 3.x) | Tilen already knows Arduino |
 | Libraries (candidates) | `ESPAsyncWebServer` + `AsyncTCP` (ESP32Async forks) for HTTP + WebSocket · `FastAccelStepper` (hardware-timed) or `AccelStepper` for steppers · `ESP32Servo` · built-in LEDC for wheel PWM | To be confirmed when the firmware skeleton is started |
+| Wheel duty cap | `WHEEL_MAX_DUTY` ≈ 50 %, a compile-time constant the UI cannot exceed. UI "100 %" maps to the cap | The wheel rail is 24 V, the 775 motors are 12 V (`wiring/04-launch-wheels-dc-motors.md`) |
+| Wheel PWM frequency | `WHEEL_PWM_HZ`, 1 kHz to start, then 10–16 kHz, never above 20 kHz | Limit of the MOSFET modules |
+| Homing | Optical endstop (from the printer) on one axis, second endstop to be added; active level is a constant `LIMIT_ACTIVE_LEVEL` | `wiring/06-optical-endstop.md` |
 
 ## Decisions still open
 
@@ -59,8 +62,8 @@ controller/
 > without internet (captive-portal popup), which affects how the app is opened.
 
 > ❓ **OPEN:** Before I design the control layout I need the pan and tilt ranges in degrees,
-> whether homing switches will be fitted (`pin-map.md` reserves GPIO 1/2), and whether the
-> two wheels need independent speeds.
+> which axis gets the existing optical endstop and whether a second one will be fitted
+> (`wiring/pin-map.md` reserves GPIO 1/2), and whether the two wheels need independent speeds.
 
 > ❓ **OPEN:** Before I write the feeder state machine I need the exact feed sequence from the
 > prototype: order and timing of servo A, servo B and the feeder stepper for one shuttle,
@@ -77,7 +80,10 @@ controller/
 - **E-STOP** button always visible in the UI, on every screen, largest touch target. Stops
   everything immediately and requires an explicit "reset" to continue.
 - **Soft start / soft stop** on the wheels. Duty changes are rate-limited in firmware, not
-  in the UI.
+  in the UI, and the second wheel starts a moment after the first so the 24 V rail never
+  sees two spin-up currents at once.
+- **Duty cap:** no code path may write more than `WHEEL_MAX_DUTY` to the wheel PWM. The
+  wheel module clamps every request; the UI only ever sees 0–100 % of the cap.
 - **Safe boot state:** hardware pull-ups/downs (see `wiring/pin-map.md`) plus firmware sets
   every output to "off" as the very first thing in `setup()`.
 - **Feeder interlock:** the feeder only cycles when the wheels are at the requested speed.

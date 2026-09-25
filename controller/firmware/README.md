@@ -6,7 +6,9 @@ Not started. Planned structure once the open questions in `../README.md` are ans
 firmware/
   launcher/                 Arduino sketch folder (name = .ino name)
     launcher.ino            setup()/loop(): boot to safe state, start Wi-Fi + server, run tasks
-    config.h                every GPIO from wiring/pin-map.md, Wi-Fi SSID/password, limits
+    config.h                every GPIO from wiring/pin-map.md, Wi-Fi SSID/password, limits,
+                            WHEEL_MAX_DUTY (≈ 50 %: 24 V rail, 12 V motors), WHEEL_PWM_HZ,
+                            LIMIT_ACTIVE_LEVEL of the optical endstop
     safety.cpp/.h           heartbeat watchdog, e-stop, safe-state function
     wheels.cpp/.h           LEDC PWM for the two 775 drivers, rate-limited ramps
     aim.cpp/.h              pan/tilt steppers: jog, move-to, homing, soft limits

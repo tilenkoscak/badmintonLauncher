@@ -1,6 +1,9 @@
 # 02 · Steppers: pan, tilt and feeder through DRV8825
 
-Three identical circuits. Only the STEP/DIR pins differ (see `pin-map.md`):
+Three identical circuits on the **24 V** rail (PSU output 1). The motors are NEMA 17
+steppers salvaged from an Artillery Sidewinder X3 Plus (two Z-axis "42-35" motors and one
+from another axis), estimated at 1.2–1.7 A per phase. Each DRV8825 already carries its
+100 µF / 50 V capacitor. Only the STEP/DIR pins differ (see `pin-map.md`):
 
 | Axis | STEP | DIR | ENABLE | FAULT (optional) |
 |---|---|---|---|---|
@@ -16,16 +19,18 @@ Three identical circuits. Only the STEP/DIR pins differ (see `pin-map.md`):
 - STEP/DIR at 3.3 V are fine: the DRV8825 treats anything above 2.2 V as high.
 - The step pulses themselves are the same idea. The ESP32 can also generate them in hardware
   (FastAccelStepper uses the RMT/MCPWM peripherals), which frees the CPU for Wi-Fi.
+- VMOT, current limits and microstep jumpers stay exactly as tuned on the Uno prototype. The
+  drivers can move over as they are; only the logic-side wires change.
 
 ## Connections
 
 ```
                     DRV8825 carrier, top view, potentiometer at the top
                     ┌──────────────────────────────────┐
-   ESP32 GPIO 17 ───┤ ENABLE                      VMOT ├─── +12 V motor rail ─┐
-   3V3 / open   ────┤ M0                           GND ├─── motor rail GND    ├─ 100 µF ≥35 V, as close
-   3V3 / open   ────┤ M1                            2B ├─── coil B            │  to the pins as possible
-   3V3 / open   ────┤ M2                            2A ├─── coil B           ─┘
+   ESP32 GPIO 17 ───┤ ENABLE                      VMOT ├─── +24 V rail (PSU output 1) ─┐
+   3V3 / open   ────┤ M0                           GND ├─── 24 V rail GND (star point)  ├─ 100 µF / 50 V,
+   3V3 / open   ────┤ M1                            2B ├─── coil B                      │  already fitted
+   3V3 / open   ────┤ M2                            2A ├─── coil B                     ─┘
    3V3          ────┤ RESET                         1A ├─── coil A
    3V3          ────┤ SLEEP                         1B ├─── coil A
    ESP32 STEP   ────┤ STEP                       FAULT ├─── (optional) ESP32 GPIO 18, INPUT_PULLUP
@@ -35,8 +40,8 @@ Three identical circuits. Only the STEP/DIR pins differ (see `pin-map.md`):
 
 | DRV8825 pin | Connect to | Notes |
 |---|---|---|
-| VMOT | +12 V motor rail | 8.2–45 V allowed. Put the 100 µF electrolytic directly across VMOT/GND on every driver |
-| GND (beside VMOT) | Motor rail ground | Both GND pins are internally connected; this one carries the motor current |
+| VMOT | +24 V rail (PSU output 1) | 8.2–45 V allowed; 24 V gives better speed and torque than 12 V. The 100 µF / 50 V electrolytic across VMOT/GND is already on each driver |
+| GND (beside VMOT) | 24 V rail ground, at the star point | Both GND pins are internally connected; this one carries the motor current |
 | 2B, 2A | Stepper coil B | Swapping the two wires of **one** coil reverses direction |
 | 1A, 1B | Stepper coil A | Find pairs with a multimeter: a coil measures a few ohms, wires of different coils read open |
 | FAULT | ESP32 GPIO 18 (optional) | Open-drain, low on over-current / over-temperature. Measure that it idles ≤ 3.3 V before connecting. Wire-OR the three drivers to one input |
@@ -75,14 +80,24 @@ The DRV8825 needs VMOT present to produce its reference voltage, so:
    (it is the Vref node) or on the Vref via next to it.
 3. Turn the pot until Vref matches the target. With the usual 0.100 Ω sense resistors:
    `I_limit = 2 × Vref`, so `Vref = I_target / 2`.
-   Example: a 1.2 A motor run at 80 % → 0.96 A → Vref ≈ 0.48 V.
-4. Start around 60–70 % of the motor's rated current. Increase only if the axis skips steps.
-   Above ~1 A per phase fit the heatsink, above ~1.5 A add airflow.
 
-> ❓ **OPEN:** Before I can give concrete Vref values for each axis I need the stepper ratings
-> (see `PARTS.md` #3) and the sense-resistor marking on the DRV8825 boards (`R100` vs `R200`,
-> `PARTS.md` #2). If Tilen already tuned the pots on the Uno prototype, the drivers can be
-> moved over as they are: the current limit does not depend on the microcontroller.
+   | Motor label says | 70 % (cool, quiet) | 80 % | 100 % (heatsink + airflow) |
+   |---|---|---|---|
+   | 1.2 A | Vref 0.42 V | 0.48 V | 0.60 V |
+   | 1.5 A | 0.53 V | 0.60 V | 0.75 V |
+   | 1.7 A | 0.60 V | 0.68 V | 0.85 V |
+
+4. Start around 70 % of the motor's rated current. Increase only if the axis skips steps.
+   Above ~1 A per phase fit the heatsink, above ~1.5 A add airflow. The feeder can usually
+   run lower than pan and tilt, which helps the 4.2 A budget of the 24 V rail.
+
+Since the pots were already tuned on the Uno prototype, the practical procedure is: measure
+the Vref on each driver as it is, write the three values into this file, and compare them
+with the table once the motor labels are read.
+
+> ❓ **OPEN:** Before I can fill in the final Vref values I need the label text of each motor
+> (`PARTS.md` #3), the sense-resistor marking on the drivers (`R100` vs `R200`, `PARTS.md` #2)
+> and the Vref currently measured on each of the three drivers.
 
 ## Enable strategy
 
@@ -105,7 +120,9 @@ One shared ENABLE line is enough for v1:
 
 ## Smoke test: one stepper
 
-Wire one driver (pan) exactly as above, motor rail on, ESP32 on USB, common GND connected.
+Wire one driver (pan) exactly as above, 24 V rail on, ESP32 on USB, common GND connected.
+Artillery motors come with a JST-XH plug; the two coil pairs are found with a multimeter
+(a coil reads a few ohms, wires of different coils read open).
 
 ```cpp
 // Spins the pan stepper at 1000 steps/s, reversing every 2 s. Pins from pin-map.md.
