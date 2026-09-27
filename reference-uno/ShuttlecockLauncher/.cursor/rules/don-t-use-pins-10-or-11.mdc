@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+The IO pins 10 and 11 are faulty and their states are stuck, so don't use them when writing code for this project.
