@@ -17,7 +17,7 @@ the three steppers, the dual-output power supply and the optical endstop.
 | 1 | ESP32-S3 dev board, N16R8, 44 pins, USB-C | 1 | Main controller: Wi-Fi access point, web server, all motion | Module variant known; board details to verify |
 | 2 | DRV8825 stepper driver carrier, 100 µF/50 V capacitor already fitted | 3 | Pan, tilt and feeder steppers | Known part; sense-resistor marking to verify |
 | 3 | NEMA 17 stepper from the Sidewinder X3 Plus (2 × Z-axis type "42-35", 1 × from another axis) | 3 | Pan, tilt, feeder | Size known; rated current estimated 1.2–1.7 A, label to read |
-| 4 | Miuzei 15 kg digital servo, metal gear, 180° | 2 | Feeder | 4.8–7.4 V, powered at 5 V, 0.5–2.5 ms pulse |
+| 4 | Miuzei 15 kg digital servo, metal gear, 180° | 2 | Feeder: "arms" servo and "spoon" servo | 4.8–7.4 V, powered at 5 V; working angles known from the Uno code |
 | 5 | 775 brushed DC motor, 12 V, 150 W, 10 000 rpm | 2 | Launch wheels | Known from listing. **On a 24 V rail today, 12 V buck recommended, see #7** |
 | 6 | Artillery X3 Plus power supply, two outputs: 24 V / 4.2 A and 36 V / 9.7 A | 1 | Everything | Ratings known; model label and output isolation to verify |
 | 7 | Buck converter 36 V → 24 V, IP68 potted module | 1 | Wheel rail | Family known. **Recommended: replace with the 12 V / 30 A sibling** |
@@ -26,8 +26,8 @@ the three steppers, the dual-output power supply and the optical endstop.
 | 10 | Electrolytic capacitor 1000 µF / 50 V | 2 | Buffer across each MOSFET module input | Known, correctly placed |
 | 11 | TVS diode 1.5KE30A | 2 | Over-voltage clamp across each MOSFET module input | Known, correctly placed |
 | 12 | MEAN WELL N7805-1CW switching regulator, 5 V / 1 A | 1 | 24 V → 5 V, today for the servos | Confirmed 5 V. **Undersized for two 15 kg servos** |
-| 13 | Optical endstop from the Sidewinder X3 Plus | 1 | Homing or shuttle detection | Model, pinout and role to confirm |
-| 14 | Arduino Uno | 1 | Prototype controller, being replaced | Reference only |
+| 13 | Optical endstop from the Sidewinder X3 Plus | 1 | Feeder home and safety limit | Role and logic known from the Uno code (LOW when triggered); model and 3.3 V behaviour to confirm |
+| 14 | Arduino Uno | 1 | Prototype controller, being replaced | Its code is in `controller/reference-uno/` |
 
 ---
 
@@ -101,12 +101,19 @@ believed to be the same size and rating.
 | Rated current | **Estimated 1.2–1.7 A per phase** (Tilen). Typical for a 42-35 is 1.3–1.5 A |
 | Wiring | Bipolar, 4 wires, Artillery motors come with a JST-XH plug (4-pin, or 6-pin with 4 populated) |
 
+What the Uno code adds (`controller/reference-uno/README.md`): the feeder driver ran at
+1/8 microstepping with M0 and M1 tied together and driven HIGH, one feed stroke is
+2.5 revolutions forward and back, and the feeder homes against the optical endstop (#13).
+Pan and tilt ran at a gentle 50 RPM with a software multiplier of 2, but the code's comments
+and the shared microstep pin disagree about the actual jumpering of those two drivers.
+
 > ❓ **OPEN:** Before I fix the DRV8825 current limits and the steps-per-degree maths I need,
 > for each motor, the text printed on its label (model number and current, e.g. "42HB34F...
 > 1.3A" or "17HS15-1504S") and which motor sits on which axis (pan / tilt / feeder). If the
 > third motor is not a 42-35, its label tells us. I also need the gear or belt ratio between
-> each stepper and its axis, and what the feeder stepper physically does (indexes a carousel?
-> turns a screw?).
+> each stepper and its axis, what the feeder stepper drives (a lead screw? a rack? how far do
+> 2.5 revolutions move it?), and which M0/M1/M2 pins of the pan and tilt drivers were wired
+> to Uno pin 9.
 
 ## 4. Hobby servos (×2, feeder)
 
@@ -126,9 +133,23 @@ Amazon.de B0C4T73SMB: **Miuzei Digital Servo 15 kg, metal gear, 180°** (sold as
 Powered at **5 V** from the 24 V rail through the MEAN WELL N7805 (#12). Confirmed correct;
 the "12 V" in the first prototype notes was a slip.
 
-> ❓ **OPEN:** Before I design the feed sequence in firmware I need a description of what each
-> servo does and in what order servo A, servo B and the feeder stepper move for one shuttle,
-> including the angles and delays that worked on the prototype.
+Roles and working positions, from the Uno code (`controller/reference-uno/README.md`), in
+Uno `Servo` degrees (pulse range 544–2400 µs):
+
+| Servo | Uno pin | Closed | Open | Other | Settle delays |
+|---|---|---|---|---|---|
+| Arms (`armsServo`) | 10 | 10° | 40° | – | open 550 ms, close 300 ms |
+| Spoon (`spoonServo`) | 11 | 180° | 0° | guiding position 105° | open 600 ms, close 750 ms, guiding 600 ms |
+
+One shuttle: arms open → arms close → spoon to guiding → spoon open → feeder 2.5 revolutions
+forward → wait 2 s → feeder back → spoon close. Both servos must be commanded to their closed
+position immediately after `attach()`, and the feeder must be retracted before any servo
+moves; at the default 90° the arms hit an obstacle and the spoon blocks the feeder.
+
+> ❓ **OPEN:** The sequence is known; what I still need is one sentence each on what the
+> "arms" and the "spoon" physically do to a shuttle (release one from the stack? cradle it into
+> the feeder channel?), so the web app can name things properly and the state machine can
+> detect a failed feed.
 
 ## 5. 775 brushed DC motors, 12 V, 150 W (×2, launch wheels)
 
@@ -154,10 +175,15 @@ converter (#7). At 100 % PWM duty they would run at twice their rating. Recommen
 12 V buck (see #7). Until that is fitted, the firmware carries a hard cap `WHEEL_MAX_DUTY`
 of about 50 % (12 V average).
 
-> ❓ **OPEN:** Before I can judge whether a 12 V rail loses any launch range I need the highest
-> PWM value (0–255 on the Uno) the prototype used for a normal shot. Above 128 means the
-> motors were already being over-volted for those shots. I also need to know whether the two
-> wheels must be adjustable independently (spin shots) or always run at the same speed.
+The only wheel code on the Uno is a single-motor test (`launcher_motors_control.ino`): PWM
+on pin 5 at 980 Hz, a 200 ms kick at duty 255, then duty 100 (39 %) and a ramp to 255 and
+back. So a 775 has already run at full duty on the 24 V rail, but there is no record of which
+duty produced a good shot.
+
+> ❓ **OPEN:** Before I can judge whether a 12 V rail loses any launch range I need the duty
+> (0–255) that gave a good shot in manual tests, if that was ever tried. Above 128 means those
+> shots already used more than 12 V average. I also need to know whether the two wheels must
+> be adjustable independently (spin shots) or always run at the same speed.
 
 ## 6. Power supply: Artillery Sidewinder X3 Plus PSU (dual output)
 
@@ -241,9 +267,11 @@ Switch Drive PWM Regulator Module*. The common 34 × 17 mm green module.
 
 One module per wheel. Details in `wiring/04-launch-wheels-dc-motors.md`.
 
-> ❓ **OPEN:** Two quick checks on one module: continuity between DC+ and OUT+ (confirms
-> low-side switching, which is why OUT− must never be tied to ground), and the PWM frequency
-> the Uno sketch used (`analogWrite` default is 490 Hz, 980 Hz on pins 5/6, unless changed).
+The Uno test drove the module at 980 Hz (`analogWrite` on pin 5), so the module is proven at
+that frequency; the ESP32 will use ≈ 16 kHz, inside the module's 0–20 kHz rating.
+
+> ❓ **OPEN:** One quick check on one module: continuity between DC+ and OUT+ (confirms
+> low-side switching, which is why OUT− must never be tied to ground).
 
 ## 10. Electrolytic capacitor 1000 µF / 50 V (×2)
 
@@ -285,28 +313,29 @@ prototype got away with it because the feeder loads are light. Two acceptable la
 
 An Artillery-style optical endstop board: a slotted infrared photo-interrupter, an indicator
 LED and a 3-wire connector (VCC, GND, SIGNAL). Unlike a mechanical micro switch it needs
-power and produces an active logic level rather than a dry contact; the level flips when a
-flag enters the slot. Which level means "blocked" depends on the board and is established by
-a two-minute test. Details in `wiring/06-optical-endstop.md`.
+power and produces an active logic level rather than a dry contact.
 
-Level-shifting matters here: if the board is powered from 5 V its SIGNAL swings to 5 V, which
-must not reach an ESP32 pin. Plan A is to power it from 3V3 (most of these boards work),
-plan B is a resistor divider on SIGNAL.
+Role, from the Uno code: it is the **feeder's home sensor and safety limit** ("feeding
+limiter", Uno pin 4). The feeder stepper homes against it at start-up, and an unexpected
+trigger during operation stops everything. It was read as a plain input without pull-up and
+is **LOW when triggered**. Pan and tilt had no endstops; their limits were taught with
+buttons. Details in `wiring/06-optical-endstop.md`.
 
-> ❓ **OPEN:** Before I finalize the endstop page and the pin map I need a photo of the board
-> (or its pin labels and any part numbers), whether it lights/switches when powered from 3.3 V,
-> and what Tilen intends it for: pan homing, tilt homing, or detecting a shuttle in the feeder.
-> Only one is available, so the other axis needs a second switch.
+Level-shifting matters here: on the Uno the board ran from 5 V, so its SIGNAL swung to 5 V,
+which must not reach an ESP32 pin. Plan A is to power it from 3V3 (most of these boards
+work), plan B is a resistor divider on SIGNAL.
+
+> ❓ **OPEN:** Before I finalize the endstop page I need a photo of the board (or its pin
+> labels and any part numbers), the result of the 3.3 V test in `wiring/06-optical-endstop.md`,
+> and a yes that the "feeding limiter" of the Uno code is this optical board.
 
 ## 14. Arduino Uno (prototype controller)
 
-Kept only as a reference. Everything the Uno sketches encode (step rates, accelerations,
-servo angles, feed timing, PWM duty for a given launch distance) is directly reusable in
-the ESP32 firmware. Note the Uno is 5 V logic; none of its 5 V wiring may be reused on
-ESP32 inputs.
-
-> ❓ **OPEN:** Before I write the firmware I need the Uno sketches from the prototype. Please
-> copy them into `controller/reference-uno/` (any state, they do not need to be clean).
+Kept only as a reference. Its code (a PlatformIO project and a set of Arduino IDE sketches)
+is in `controller/reference-uno/`, summarised in the README there: servo angles, feed
+sequence, homing routine, stepper speeds and the wheel test are all extracted. Note the Uno is
+5 V logic; none of its 5 V wiring may be reused on ESP32 inputs. This particular Uno's
+pins 10 and 11 were suspected faulty as inputs, which is irrelevant for the ESP32 build.
 
 ---
 
@@ -316,7 +345,7 @@ ESP32 inputs.
 |---|---|
 | **Buck converter 36/48 V → 12 V, 30 A, IP68** (same family as #7) | Puts the 775 motors on their rated voltage; hardware speed limit. See #7 |
 | 5–6 V buck converter, ≥ 3 A, fed from the 24 V rail | Servo supply; the N7805 (1 A) moves to the ESP32. See #12 |
-| Second endstop (optical or mechanical) | #13 covers one axis; pan and tilt both need homing |
+| Endstops for pan and tilt (optional) | The prototype taught pan/tilt limits with buttons at every start; the app will do the same and remember them. Endstops only if repeatable homing is wanted later |
 | Physical E-stop or switch in the wheel rail | Cuts the wheels without killing the ESP32 |
 | Fuses: 10 A per wheel branch on 24 V (15 A on 12 V), optional 4 A for the stepper branch | Wiring protection |
 | 470–1000 µF capacitor on the servo rail | Absorbs servo start/stall spikes |
@@ -329,12 +358,11 @@ ESP32 inputs.
 Short version of every `❓ OPEN:` above, to answer in one go:
 
 1. ESP32 board: photo or pin labels; one or two USB-C ports; RGB LED pin; USB-serial chip; antenna type.
-2. DRV8825: sense-resistor marking, heatsinks, current Vref and microstep settings per driver.
-3. Steppers: label text of each motor, which motor is on which axis, gear/belt ratios, what the feeder stepper does.
-4. Servos: feed sequence with roles, angles and delays.
-5. 775 wheels: highest PWM value used on the Uno; independent wheel speeds or not.
+2. DRV8825: sense-resistor marking, heatsinks, current Vref per driver; which M pins of the pan/tilt drivers were wired to Uno pin 9.
+3. Steppers: label text of each motor, which motor is on which axis, gear/belt ratios, what the feeder stepper drives and how far 2.5 revolutions move it.
+4. Servos: one sentence each on what "arms" and "spoon" physically do.
+5. 775 wheels: duty that gave a good shot in manual tests, if known; independent wheel speeds or not.
 6. PSU: model label; continuity between the two outputs' negatives; mains switch; fan.
 7. Buck converter: replace with 12 V / 30 A (recommended) or keep 24 V? If kept: variant and measured output voltage.
-8. MOSFET module: DC+ ↔ OUT+ continuity; PWM frequency used on the Uno.
-9. Optical endstop: photo/pin labels; works at 3.3 V?; intended role.
-10. Uno prototype sketches → `controller/reference-uno/`.
+8. MOSFET module: DC+ ↔ OUT+ continuity.
+9. Optical endstop: photo/pin labels; 3.3 V test; confirm it is the "feeding limiter" of the Uno code.

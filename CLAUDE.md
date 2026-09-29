@@ -27,7 +27,7 @@ that integration (one controller + one UI) is the goal of this repo.
 | `CLAUDE.md` | This file: project summary + working conventions |
 | `PARTS.md` | Bill of materials: every electronic part, what is known, what is still unknown |
 | `wiring/` | How to wire each subsystem to the ESP32-S3. Tilen has never used an ESP32 before, so these docs explain the differences from the Uno, not just the connections |
-| `controller/` | The controller itself: `firmware/` (ESP32-S3 sketch), `webapp/` (the phone UI the ESP32 serves) and `reference-uno/` (prototype Uno sketches, to be ported) |
+| `controller/` | The controller itself: `firmware/` (ESP32-S3 sketch), `webapp/` (the phone UI the ESP32 serves) and `reference-uno/` (the Uno prototype code; its README extracts servo angles, feed sequence, homing and speeds) |
 
 ## Key technical constraints
 
@@ -69,11 +69,12 @@ that integration (one controller + one UI) is the goal of this repo.
 - Prefer small, testable steps: each wiring doc ends with a smoke test that proves that
   one subsystem works on the ESP32 before the next one is connected.
 
-## Status (2026-09-25)
+## Status (2026-09-28)
 
 - [x] Prototype mechanics and all subsystems working individually on Arduino Uno
 - [x] Repo skeleton, parts list, first draft of wiring docs and pin map
 - [x] Component specs collected: PSU, buck, wheel power chain, servos, N7805, optical endstop
+- [x] Uno prototype code collected in `controller/reference-uno/` and summarised (feed sequence, angles, homing, speeds)
 - [ ] Decide on the wheel buck: 12 V / 30 A replacement (recommended) or keep 24 V with the duty cap
 - [ ] Resolve the remaining `OPEN:` questions (mostly confirmations: labels, measurements, feed sequence)
 - [ ] Final pin map and wiring diagrams

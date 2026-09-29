@@ -63,8 +63,13 @@ PWM frequency: at the Uno's ~1 kHz on a low-inductance 775, the current ripple o
 enormous (heat, brush arcing, noise); at 16 kHz it is a few amps on either rail. So whichever
 rail is used, run the modules near their 20 kHz limit.
 
-> ❓ **OPEN:** Tilen decides between the two columns (`PARTS.md` #7). Also needed: the highest
-> `analogWrite` value the Uno prototype used for a normal shot (0–255). Above 128 means those
+What the Uno code tells us (`controller/reference-uno/README.md`): the only wheel program is
+a single-motor test at 980 Hz that kicks at duty 255 for 200 ms, drops to duty 100 and ramps
+to 255 and back. So a 775 has already seen full duty on the 24 V rail, at least without a
+shuttle. No shot-tuning values were recorded.
+
+> ❓ **OPEN:** Tilen decides between the two columns (`PARTS.md` #7). Also useful: the duty
+> (0–255) that gave a good shot in manual tests, if that was ever tried. Above 128 means those
 > shots already used more than 12 V average, and a 12 V rail would shorten the maximum range.
 
 ## Direction
@@ -76,8 +81,12 @@ one motor are swapped. Mark the wheels L and R and the motor leads + / − once 
 
 - PWM comes from the LEDC peripheral, 10-bit resolution (0–1023). The module accepts
   0–20 kHz. Target **16 kHz** (`WHEEL_PWM_HZ`), which keeps current ripple small on either
-  rail. If the module's heatsink runs hot at working duty, drop to 10 kHz. The Uno's 490/980 Hz
-  is fine only for a first bring-up.
+  rail. If the module's heatsink runs hot at working duty, drop to 10 kHz. The Uno drove the
+  module at 980 Hz, which proves the module but whines and ripples; use it only to reproduce
+  the prototype on the first bring-up.
+- The Uno test used a 200 ms full-duty kick to overcome stall. Keep that as an option in
+  firmware (`WHEEL_KICK_MS`), but on a 12 V rail a plain ramp is probably enough, and on the
+  24 V rail a kick must respect `WHEEL_MAX_DUTY`.
 - One PWM line per wheel so left and right can differ later. If they must always match, the
   firmware writes the same duty to both.
 - Pull-downs on the PWM lines: during reset the ESP32 pins float, and a floating trigger

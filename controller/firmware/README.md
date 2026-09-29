@@ -8,7 +8,9 @@ firmware/
     launcher.ino            setup()/loop(): boot to safe state, start Wi-Fi + server, run tasks
     config.h                every GPIO from wiring/pin-map.md, Wi-Fi SSID/password, limits,
                             WHEEL_MAX_DUTY (≈ 50 %: 24 V rail, 12 V motors), WHEEL_PWM_HZ,
-                            LIMIT_ACTIVE_LEVEL of the optical endstop
+                            FEED_HOME_ACTIVE_LEVEL (LOW), servo angles (arms 10/40,
+                            spoon 180/105/0, pulse range 544–2400 µs), microstep
+                            multipliers per axis, feed stroke (2.5 revolutions)
     safety.cpp/.h           heartbeat watchdog, e-stop, safe-state function
     wheels.cpp/.h           LEDC PWM for the two 775 drivers, rate-limited ramps
     aim.cpp/.h              pan/tilt steppers: jog, move-to, homing, soft limits
@@ -27,3 +29,6 @@ Design rules for the firmware:
   Nothing in `loop()` may block for more than a few ms; no `delay()` in motion code.
 - All outputs are set to their safe state before anything else in `setup()`.
 - Pin numbers live only in `config.h`.
+- Start values for speeds, angles and sequences come from `../reference-uno/README.md`, not
+  from the raw Uno constants: the Uno could not reach its commanded feeder speed, and its
+  pan/tilt microstep multiplier does not match the wiring.

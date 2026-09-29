@@ -1,13 +1,20 @@
-# 06 · Optical endstop (from the Sidewinder X3 Plus)
+# 06 · Optical endstop: the feeder's home sensor
 
 One Artillery-style optical endstop board is available: a slotted infrared photo-interrupter,
-an indicator LED and a 3-wire connector. Unlike a mechanical micro switch it is **powered**
-and outputs an **active logic level**, so it must be treated as a small circuit, not as a
-contact.
+an indicator LED and a 3-wire connector. On the Uno prototype it is the **feeder limiter**
+(`controller/reference-uno/`): the feeder stepper homes against it at start-up, and the
+code treats an unexpected trigger as an emergency stop. Unlike a mechanical micro switch it
+is **powered** and outputs an **active logic level**, so it must be treated as a small
+circuit, not as a contact.
+
+| Signal | GPIO | Firmware constant |
+|---|---|---|
+| Endstop SIGNAL | GPIO 1 (`FEED_HOME`) | `FEED_HOME_ACTIVE_LEVEL = LOW` (from the Uno code; re-check on 3.3 V) |
 
 > ❓ **OPEN:** Before this page is final I need (see `PARTS.md` #13): a photo of the board or
-> its pin labels and part numbers, whether it works when powered from 3.3 V, and what it is
-> for: pan homing, tilt homing or shuttle detection. The pin in `pin-map.md` depends on that.
+> its pin labels and part numbers, and the result of the 3.3 V test below. I also assume the
+> "feeding limiter" in the Uno code *is* this optical board and not a mechanical switch;
+> one word from Tilen confirms it.
 
 ## How it behaves
 
@@ -15,16 +22,15 @@ contact.
 |---|---|
 | Two wires, dry contact | Three wires: VCC, GND, SIGNAL |
 | No power needed; ESP32 `INPUT_PULLUP` and switch to GND | Needs VCC. SIGNAL is driven by the board |
-| Level defined by the wiring | Level defined by the board's circuit: SIGNAL flips when a flag enters the slot. Some boards go LOW when blocked, some HIGH |
+| Level defined by the wiring | Level defined by the board's circuit. On the prototype: **LOW when the flag is in the slot**, HIGH otherwise, read with a plain `INPUT` and no pull-up |
 | Wear, bounce | No wear, no bounce, very repeatable position |
 
-The "different logic" Tilen noticed is this: the board itself decides which level means
-"blocked", and it is active in both states. Which way round it is gets established once with
-the test below and lands in the firmware as `LIMIT_ACTIVE_LEVEL`.
+The "different logic" Tilen noticed is this: the board itself drives the line in both states,
+so it works without a pull-up and reads LOW when triggered.
 
 ## The 3.3 V question
 
-If the board is powered from 5 V, SIGNAL swings up to 5 V, which is **not allowed** into an
+On the Uno the board ran from 5 V, so its SIGNAL swung to 5 V. That is **not allowed** into an
 ESP32 pin. Two ways out:
 
 - **Plan A, power it from 3V3.** Most of these boards (IR LED with a series resistor, a
@@ -40,7 +46,7 @@ ESP32 pin. Two ways out:
    ┌─────────────┐
    │ VCC  ───────┼─────────────────────── 3V3
    │ GND  ───────┼─────────────────────── GND
-   │ SIG  ───────┼─────────────────────── GPIO 1 (pan) or GPIO 2 (tilt), INPUT (pull-up if the board is open-collector)
+   │ SIG  ───────┼─────────────────────── GPIO 1  (FEED_HOME), pinMode INPUT
    └─────────────┘
 ```
 
@@ -48,34 +54,37 @@ ESP32 pin. Two ways out:
 |---|---|---|
 | VCC (also marked V, +, 5V) | ESP32 `3V3` | Draws a few mA |
 | GND (G, −) | ESP32 GND | |
-| SIGNAL (S, OUT, D) | GPIO 1 or 2 per `pin-map.md` | Use `INPUT_PULLUP` if the level floats with nothing in the slot; otherwise plain `INPUT` |
+| SIGNAL (S, OUT, D) | GPIO 1 | Plain `INPUT` as on the Uno. If the level floats with nothing in the slot, switch to `INPUT_PULLUP` |
 
-## Smoke test: find the logic
+## Smoke test: confirm the logic on 3.3 V
 
 ```cpp
-const int END_PIN = 1;   // pan endstop per pin-map.md
+const int FEED_HOME = 1;
 
 void setup() {
   Serial.begin(115200);
-  pinMode(END_PIN, INPUT_PULLUP);
+  pinMode(FEED_HOME, INPUT);
 }
 
 void loop() {
-  Serial.printf("endstop = %d\n", digitalRead(END_PIN));
+  Serial.printf("feed home = %d\n", digitalRead(FEED_HOME));
   delay(200);
 }
 ```
 
 Power the board from 3V3. Watch the serial monitor while sliding a piece of card into the
-slot. Expected: the value flips reliably between 0 and 1 and the board's own LED changes.
-Write down which value means "blocked": that is `LIMIT_ACTIVE_LEVEL`. If the value never
-changes, the board does not work at 3.3 V: switch to plan B (5 V + divider). If it flips but
-is noisy, add a 100 nF capacitor from SIGNAL to GND at the ESP32 end.
+slot. Expected: `1` with the slot open, `0` with the slot blocked, and the board's own LED
+changes. That confirms `FEED_HOME_ACTIVE_LEVEL = LOW` on 3.3 V. If the value never changes,
+the board does not work at 3.3 V: switch to plan B (5 V + divider). If it flips but is noisy,
+add a 100 nF capacitor from SIGNAL to GND at the ESP32 end.
 
-## Using it for homing
+## How the firmware uses it
 
-For pan or tilt, mount a small flag on the moving part so it enters the slot at one end of
-travel. On start-up the firmware moves slowly toward that end until the endstop triggers,
-sets position = 0 there, and backs off a few steps. Only after homing are the soft limits
-active. The other axis needs a second endstop (optical or a mechanical micro switch on
-`GPIO 2`, `INPUT_PULLUP`, switch to GND).
+Same as the Uno code: at start-up drive the feeder slowly toward the endstop until it
+triggers, back off until it releases, call that position 0, then retract 2.5 revolutions to
+the ready position. During operation an unexpected trigger stops the feeder. Details and the
+speeds that worked are in `controller/reference-uno/README.md`.
+
+Pan and tilt do **not** need endstops for v1: the prototype taught their limits with two
+buttons at every start, and the web app will do the same and remember them. GPIO 2 and 42
+stay reserved in `pin-map.md` in case endstops are added later.

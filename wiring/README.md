@@ -9,11 +9,11 @@ so a subsystem is proven on the ESP32 before the next one is connected.
 |---|---|---|
 | `01-esp32-s3-basics.md` | The ESP32-S3 board itself: which pins may be used, power, Arduino IDE setup | Draft. Board photo pending |
 | `02-steppers-drv8825.md` | Pan, tilt and feeder steppers (Sidewinder X3 Plus motors) through DRV8825 on 24 V | Draft. Motor labels pending |
-| `03-servos.md` | The two Miuzei 15 kg feeder servos | Draft. Feed roles pending |
+| `03-servos.md` | The two Miuzei 15 kg feeder servos (arms and spoon) | Draft. Angles known from the Uno code |
 | `04-launch-wheels-dc-motors.md` | The two 775 motors: buck, MOSFET module with buffer and TVS, flyback diode | Draft. Rail voltage decision pending (24 V today, 12 V recommended) |
 | `05-power.md` | The Artillery dual-output PSU, rails, grounding, switching | Draft. PSU label and buck decision pending |
-| `06-optical-endstop.md` | The salvaged optical endstop: logic, 3.3 V, homing | Draft. Role pending |
-| `pin-map.md` | One table with every GPIO in use | Draft v0.2 |
+| `06-optical-endstop.md` | The salvaged optical endstop: the feeder's home sensor, its logic, 3.3 V | Draft. Board photo and 3.3 V test pending |
+| `pin-map.md` | One table with every GPIO in use | Draft v0.3 |
 
 Open questions are marked `❓ **OPEN:**` inside each file (convention in `CLAUDE.md`) and
 collected in the checklist at the end of `PARTS.md`.
@@ -27,7 +27,7 @@ collected in the checklist at the end of `PARTS.md`.
         ┌──────────────────┬──────────────────┬──────────────┴───┬──────────────────┐
         │ STEP/DIR/EN      │ STEP/DIR         │ STEP/DIR         │ PWM ×2           │ PWM ×2
         ▼                  ▼                  ▼                  ▼                  ▼
-   DRV8825 (pan)      DRV8825 (tilt)     DRV8825 (feed)     Servo A, Servo B    MOSFET module L / R
+   DRV8825 (pan)      DRV8825 (tilt)     DRV8825 (feed)     Arms + spoon servo  MOSFET module L / R
         │                  │                  │                  │             (15 A, low-side)
         ▼                  ▼                  ▼                  ▼                  ▼
    Pan stepper        Tilt stepper       Feed stepper       5–6 V servo rail    775 motor L / R
@@ -62,15 +62,15 @@ collected in the checklist at the end of `PARTS.md`.
 9. **Wire one subsystem at a time** and run its smoke test before adding the next.
 10. **Guard the launch wheels.** Never test them with the disks mounted until the driver and
     e-stop are proven with bare motor shafts.
-11. **Label every connector** (pan, tilt, feed, servo A/B, wheel L/R, motor + / −).
+11. **Label every connector** (pan, tilt, feed, arms servo, spoon servo, wheel L/R, motor + / −).
     Photograph the result and add the photo to this folder.
 
 ## Recommended build order
 
 1. ESP32 board alone: install the Arduino core, blink the RGB LED, print to serial, run the
    Wi-Fi scan example (`01-esp32-s3-basics.md`).
-2. Optical endstop on 3V3: find its logic (`06-optical-endstop.md`). Five minutes, and it
-   settles the level-shifting question early.
+2. Optical endstop on 3V3: confirm it still reads LOW when blocked (`06-optical-endstop.md`).
+   Five minutes, and it settles the level-shifting question early.
 3. One DRV8825 + the pan stepper on the 24 V rail. Then tilt, then feeder
    (`02-steppers-drv8825.md`).
 4. Both servos on their own 5–6 V rail (`03-servos.md`).

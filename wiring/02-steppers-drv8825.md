@@ -66,10 +66,17 @@ from another axis), estimated at 1.2–1.7 A per phase. Each DRV8825 already car
 | L | H | H | 1/32 | 6 400 |
 | H | H | H | 1/32 | 6 400 |
 
-Suggestion until the motors are known: **1/16 for pan and tilt** (smooth, quiet aiming),
-**1/4 or 1/8 for the feeder** (speed matters more than smoothness). Higher microstepping
+What the Uno prototype used (`controller/reference-uno/README.md`): the feeder driver at
+**1/8** (M0 and M1 tied together and driven HIGH by one GPIO), pan and tilt with a software
+multiplier of 2 while sharing that same microstep pin, so their real jumpering is uncertain.
+Speeds: feeder commanded 500 RPM (the Uno actually managed about 150), pan and tilt 50 RPM
+with 50 RPM/s acceleration.
+
+Proposal for the ESP32 build: **1/16 for pan and tilt** (smooth, quiet aiming), **1/8 for the
+feeder** (keeps the prototype's 4000 microsteps per 2.5-turn stroke). Jumper M0–M2 to 3V3
+per driver as in `pin-map.md` instead of driving them from a GPIO. Higher microstepping
 means more pulses per second; at 1/16 and 2 rev/s that is 6 400 pulses/s, trivial for
-the ESP32.
+the ESP32, and 150 RPM at 1/8 on the feeder is 4 000 pulses/s.
 
 ## Setting the current limit
 

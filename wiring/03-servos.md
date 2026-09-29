@@ -4,13 +4,23 @@
 **4.8–7.4 V**, pulse 0.5–2.5 ms at 50 Hz, 0.13 s per 60°, stall current not published
 (assume 2–3 A each when stalled).
 
-| Servo | Signal GPIO |
-|---|---|
-| Servo A | GPIO 10 |
-| Servo B | GPIO 11 |
+| Servo | Signal GPIO | Uno pin it replaces |
+|---|---|---|
+| Arms servo (`SERVO_ARMS`) | GPIO 10 | 10 |
+| Spoon servo (`SERVO_SPOON`) | GPIO 11 | 11 |
 
-> ❓ **OPEN:** Before this page is final I need the feed-cycle roles and angles of servo A and
-> servo B (`PARTS.md` #4).
+Roles and working positions come from the Uno code (`controller/reference-uno/README.md`):
+
+| Servo | Closed | Open | Other | Settle delays used |
+|---|---|---|---|---|
+| Arms | 10° | 40° | – | open 550 ms, close 300 ms |
+| Spoon | 180° | 0° | guiding position 105° | open 600 ms, close 750 ms, guiding 600 ms |
+
+These are Uno `Servo` degrees, i.e. pulses between 544 and 2400 µs. Use the same range in
+ESP32Servo (`attach(pin, 544, 2400)`) or the positions shift by a few degrees.
+
+> ❓ **OPEN:** Still needed: what the arms and the spoon physically do to a shuttle
+> (`PARTS.md` #4), so the firmware can name states and detect a failed feed.
 
 ## What changes compared with the Uno
 
@@ -45,7 +55,7 @@ output and keep the ESP32 off that rail.
               ┌───────────────┴───────────────┐
               │  470–1000 µF                  │
               │  across the rail              │
-  Servo A     │                               │     Servo B
+  Arms servo  │                               │  Spoon servo
   ┌────────┐  │                               │  ┌────────┐
   │ brown  ├──┼── GND ──── common GND ─── GND ─┼──┤ brown  │
   │ red    ├──┘                               └──┤ red    │
@@ -59,39 +69,47 @@ output and keep the ESP32 off that rail.
 |---|---|
 | Brown | Servo rail GND, which is the common ground shared with the ESP32 |
 | Red | Servo rail V+ (5–6 V) |
-| Orange | ESP32 GPIO 10 (A) or GPIO 11 (B) |
+| Orange | ESP32 GPIO 10 (arms) or GPIO 11 (spoon) |
 
 - The 470–1000 µF capacitor across the servo rail absorbs the current spike when a servo
   starts or stalls.
 - Route servo power wires away from the ESP32 board. Only the signal wires and one ground go
   to the ESP32 side.
 
-## Smoke test: sweep both servos
+## Smoke test: open and close both servos
 
-Servo rail on, ESP32 on USB, common GND connected. Servos not yet attached to the feeder
-mechanism, or mechanism free to move.
+Servo rail on, ESP32 on USB, common GND connected. **If the servos are mounted in the
+feeder, retract the feeder first** and use only the angles below; the Uno code warns that
+90° (where a servo goes after a bare `attach()`) makes the arms hit an obstacle and the spoon
+block the feeder. That is why each servo is written to its closed position in the same line
+it is attached.
 
 ```cpp
 #include <ESP32Servo.h>
 
-Servo servoA, servoB;
+Servo arms, spoon;
 
 void setup() {
-  servoA.setPeriodHertz(50);
-  servoB.setPeriodHertz(50);
-  servoA.attach(10, 500, 2500);   // GPIO, min and max pulse in µs (matches the 0.5–2.5 ms spec)
-  servoB.attach(11, 500, 2500);
+  arms.setPeriodHertz(50);
+  spoon.setPeriodHertz(50);
+  arms.attach(10, 544, 2400);  arms.write(10);     // Uno Servo pulse range, closed at once
+  spoon.attach(11, 544, 2400); spoon.write(180);   // closed at once
+  delay(1000);
 }
 
 void loop() {
-  servoA.write(20);  servoB.write(160); delay(800);
-  servoA.write(160); servoB.write(20);  delay(800);
+  arms.write(40);   delay(550);   // arms open
+  arms.write(10);   delay(300);   // arms closed
+  spoon.write(105); delay(600);   // spoon guiding position
+  spoon.write(0);   delay(600);   // spoon open
+  spoon.write(180); delay(750);   // spoon closed
+  delay(1500);
 }
 ```
 
-Expected: both servos swing back and forth every 0.8 s, mirrored. Jitter or twitching =
-servo rail too weak or missing capacitor. A servo that never moves = check the signal pin
-number and that the servo GND is connected to the ESP32 GND.
+Expected: the same open/close pattern as the prototype's reload cycle, minus the feeder
+stroke. Jitter or twitching = servo rail too weak or missing capacitor. A servo that never
+moves = check the signal pin number and that the servo GND is connected to the ESP32 GND.
 
 Note for the firmware: ESP32Servo and the wheel PWM both use the LEDC hardware timers.
 The ESP32-S3 has 8 channels, this project uses 4 (2 servos + 2 wheels), so there is no
