@@ -2,7 +2,7 @@
 
 One Artillery-style optical endstop board is available: a slotted infrared photo-interrupter,
 an indicator LED and a 3-wire connector. On the Uno prototype it is the **feeder limiter**
-(`controller/reference-uno/`): the feeder stepper homes against it at start-up, and the
+(`controller/reference-uno/`): the feeder stepper homes against it at start-up (in the redesigned feeder: the carriage), and the
 code treats an unexpected trigger as an emergency stop. Unlike a mechanical micro switch it
 is **powered** and outputs an **active logic level**, so it must be treated as a small
 circuit, not as a contact.
@@ -14,7 +14,8 @@ circuit, not as a contact.
 > ❓ **OPEN:** Before this page is final I need (see `PARTS.md` #13): a photo of the board or
 > its pin labels and part numbers, and the result of the 3.3 V test below. I also assume the
 > "feeding limiter" in the Uno code *is* this optical board and not a mechanical switch;
-> one word from Tilen confirms it.
+> one word from Tilen confirms it. Finally: where does it sit on the redesigned carriage's
+> travel, behind PARK or in front of WHEELS? That sets the homing direction (`FEED_HOME_DIR`).
 
 ## How it behaves
 
@@ -59,6 +60,8 @@ ESP32 pin. Two ways out:
 ## Smoke test: confirm the logic on 3.3 V
 
 ```cpp
+#include <Arduino.h>
+
 const int FEED_HOME = 1;
 
 void setup() {
@@ -80,10 +83,16 @@ add a 100 nF capacitor from SIGNAL to GND at the ESP32 end.
 
 ## How the firmware uses it
 
-Same as the Uno code: at start-up drive the feeder slowly toward the endstop until it
-triggers, back off until it releases, call that position 0, then retract 2.5 revolutions to
-the ready position. During operation an unexpected trigger stops the feeder. Details and the
-speeds that worked are in `controller/reference-uno/README.md`.
+It homes the feeder carriage, as on the Uno: at start-up, after the arms are opened and the
+lift is lowered, drive the carriage slowly toward the endstop until it triggers, back off
+until it releases and call that position 0. PARK, TUBE and WHEELS are counted in microsteps
+from there (`controller/README.md`, "Feeder state machine"). During operation an unexpected
+trigger stops the feeder. The homing speeds that worked on the Uno are in
+`controller/reference-uno/README.md`.
+
+On the Uno-era feeder the endstop sat at the front end of the stroke, towards the wheels:
+the homing move ran in the same direction as the feed stroke. Homing therefore only runs with
+the wheels off, wherever the endstop ends up.
 
 Pan and tilt do **not** need endstops for v1: the prototype taught their limits with two
 buttons at every start, and the web app will do the same and remember them. GPIO 2 and 42

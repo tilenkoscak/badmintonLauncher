@@ -14,8 +14,8 @@ Owner: Tilen. Language of code, comments and docs: English.
 |---|---|---|
 | Pan (rotate left/right) | NEMA 17 stepper (Sidewinder Z-axis motor) | DRV8825 on 24 V |
 | Tilt (up/down) | NEMA 17 stepper (Sidewinder Z-axis motor) | DRV8825 on 24 V |
-| Feeder (drops one shuttle into the wheels) | 2 × Miuzei 15 kg digital servos + 1 NEMA 17 stepper | ESP32 PWM, 5–6 V servo rail; DRV8825 on 24 V |
-| Launch wheels (two counter-rotating disks) | 2 × 775 brushed DC motors, 12 V, 150 W, 10 000 rpm | Buck from the 36 V output (24 V today, 12 V recommended), 15 A low-side MOSFET PWM module per wheel with 1000 µF + TVS on its input, E83-004 Schottky flyback across each motor |
+| Feeder (takes one shuttle from the tube and pushes it into the wheels) | A carriage on a NEMA 17 stepper, homed on the optical endstop. On the carriage: the lift servo (rack and pinion, vertical) carrying the arms servo (geared gripper that grabs the shuttle at the cork). Both servos are Miuzei 15 kg | DRV8825 on 24 V; ESP32 PWM, 5–6 V servo rail |
+| Launch wheels (two counter-rotating disks) | 2 × 775 brushed DC motors, 12 V, 150 W, 10 000 rpm | 36 V → 12 V / 30 A buck (ordered; the old 24 V buck until it arrives), 15 A low-side MOSFET PWM module per wheel with 1000 µF + TVS on its input, E83-004 Schottky flyback across each motor |
 
 Every subsystem works **individually** on the Uno prototype. Nothing is integrated yet;
 that integration (one controller + one UI) is the goal of this repo.
@@ -27,7 +27,7 @@ that integration (one controller + one UI) is the goal of this repo.
 | `CLAUDE.md` | This file: project summary + working conventions |
 | `PARTS.md` | Bill of materials: every electronic part, what is known, what is still unknown |
 | `wiring/` | How to wire each subsystem to the ESP32-S3. Tilen has never used an ESP32 before, so these docs explain the differences from the Uno, not just the connections |
-| `controller/` | The controller itself: `firmware/` (ESP32-S3 sketch), `webapp/` (the phone UI the ESP32 serves) and `reference-uno/` (the Uno prototype code; its README extracts servo angles, feed sequence, homing and speeds) |
+| `controller/` | The controller itself: `firmware/` (ESP32-S3 PlatformIO project), `webapp/` (the phone UI the ESP32 serves) and `reference-uno/` (the Uno prototype code; its README extracts speeds, homing and the old feeder's angles) |
 
 ## Key technical constraints
 
@@ -38,20 +38,25 @@ that integration (one controller + one UI) is the goal of this repo.
   **GPIO 35, 36 and 37 are used by the PSRAM** and must never be used, even though they are
   on the header. Also avoid strapping pins 0, 3, 45, 46, the USB pins 19/20 and UART0 pins 43/44.
 - Power comes from the Artillery PSU: **24 V / 4.2 A** (steppers, ESP32 via a MEAN WELL N7805,
-  servo buck) and **36 V / 9.7 A** → buck → **24 V wheel rail**. The robot is mains-powered.
-- **The wheel rail is currently 24 V but the 775 motors are 12 V.** Recommended fix: replace
-  the buck with the 12 V / 30 A module of the same family (decision pending, `PARTS.md` #7).
-  Until then firmware enforces a hard duty cap `WHEEL_MAX_DUTY` (≈ 50 %) that the UI cannot
-  exceed. This is a safety constant, not a setting. Wheel PWM runs near the module limit
-  (`WHEEL_PWM_HZ` ≈ 16 kHz) to keep current ripple low on either rail.
+  servo buck) and **36 V / 9.7 A** → buck → wheel rail. The robot is mains-powered.
+- **The wheel rail becomes 12 V**, matching the 775 motors: a 12 V / 30 A buck is ordered to
+  replace the 24 V one. Firmware derives its duty cap from a constant:
+  `WHEEL_MAX_DUTY = min(100 %, 12 V / WHEEL_RAIL_V)`. It ships with `WHEEL_RAIL_V = 24`
+  (cap 50 %) and is set to 12 only after the new buck is fitted and measured. The cap is a
+  safety constant, not a setting. Wheel PWM runs near the module limit (`WHEEL_PWM_HZ` ≈ 16 kHz).
 - The N7805 delivers 1 A. The ESP32 gets it alone; the servos get their own ≥ 3 A buck.
   The ESP32 must never share a regulator with the servos (brown-out resets).
+- **Feeder motion order is safety-relevant:** the carriage only moves with the lift at
+  BOTTOM, and the arms only open once the carriage is away from the wheels. The cycle and
+  the park routine are specified in `controller/README.md` ("Feeder state machine"); do not
+  reorder steps without checking it.
 - Phone ↔ robot link is **Wi-Fi**: the ESP32 runs as an access point and serves the web app.
   Bluetooth is not used (iOS browsers cannot reach it; Web Bluetooth is Chrome/Android only).
   Consequence: the phone has **no internet** while connected, so the web app must be fully
   self-contained (no CDN scripts, fonts or icons).
 - The launch wheels spin at up to 10 000 rpm and the 775 motors can draw tens of amps.
-  Every control path must **fail safe**: lost connection or crashed UI ⇒ wheels and feeder stop.
+  Every control path must **fail safe**: lost connection or crashed UI ⇒ wheels off and
+  feeder parked.
 - Motor power never flows through the ESP32 board. Logic and motor supplies share only a
   common ground at one star point.
 
@@ -62,22 +67,26 @@ that integration (one controller + one UI) is the goal of this repo.
   ("Before I can … I need to know …"). Search the repo for `OPEN:` to list all of them.
   When Tilen answers, replace the note with the confirmed fact. Never keep both.
 - Do not invent component ratings. If a current, voltage or pin is not confirmed, say so.
-- Firmware uses the Arduino framework on ESP32-S3 (Tilen already knows Arduino).
-  Arduino IDE vs PlatformIO is not decided yet, see `controller/README.md`.
+- Firmware: Arduino framework (arduino-esp32 core 3.x) on the ESP32-S3, built with
+  **PlatformIO** in VS Code or Cursor, like Tilen's Uno project. Board configuration is in
+  `wiring/01-esp32-s3-basics.md`.
 - `wiring/pin-map.md`, `PARTS.md` and the firmware pin definitions must stay in sync.
   A pin change is done in all three places in the same commit.
 - Prefer small, testable steps: each wiring doc ends with a smoke test that proves that
   one subsystem works on the ESP32 before the next one is connected.
+- Tilen also works from a second computer: fetch before editing, the remote may be ahead.
 
-## Status (2026-09-28)
+## Status (2026-10-05)
 
 - [x] Prototype mechanics and all subsystems working individually on Arduino Uno
 - [x] Repo skeleton, parts list, first draft of wiring docs and pin map
 - [x] Component specs collected: PSU, buck, wheel power chain, servos, N7805, optical endstop
-- [x] Uno prototype code collected in `controller/reference-uno/` and summarised (feed sequence, angles, homing, speeds)
-- [ ] Decide on the wheel buck: 12 V / 30 A replacement (recommended) or keep 24 V with the duty cap
-- [ ] Resolve the remaining `OPEN:` questions (mostly confirmations: labels, measurements, feed sequence)
+- [x] Uno prototype code collected in `controller/reference-uno/` and summarised
+- [x] Wheel rail: 12 V / 30 A buck ordered
+- [x] Toolchain: PlatformIO
+- [x] Redesigned feeder documented: carriage, lift servo, arms servo, cycle and park routine
+- [ ] Resolve the remaining `OPEN:` questions (labels, measurements, servo angles, endstop position)
 - [ ] Final pin map and wiring diagrams
 - [ ] ESP32 firmware skeleton: Wi-Fi AP, web server, WebSocket, motor drivers
-- [ ] Web app v1: manual control of every axis, wheel speed, feed button, e-stop
+- [ ] Web app v1: manual control of every axis, wheel speed, feed button, e-stop, feeder setup
 - [ ] Drills: timed auto-feed, random/programmed pan & tilt patterns

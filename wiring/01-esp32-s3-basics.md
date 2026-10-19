@@ -1,7 +1,7 @@
 # 01 · The ESP32-S3 board (N16R8, 44 pin)
 
 What the board is, which pins are safe to use, how to power it and how to set up the
-Arduino IDE for it. Written for someone who knows the Arduino Uno and is holding an ESP32
+PlatformIO for it. Written for someone who knows the Arduino Uno and is holding an ESP32
 for the first time.
 
 ## Uno → ESP32-S3: what changes
@@ -98,45 +98,64 @@ Rules of thumb:
 - The board has a brown-out detector. Random resets when motors start = the 5 V supply
   to the board is sagging. Fix the power, do not disable the detector.
 
-## Arduino IDE setup
+## PlatformIO setup
 
-1. Install Arduino IDE 2.x.
-2. *Boards Manager* → search **esp32** → install **"esp32 by Espressif Systems"** (3.x).
-   If it does not show up, add this URL under *File → Preferences → Additional boards manager
-   URLs* and search again:
-   `https://espressif.github.io/arduino-esp32/package_esp32_index.json`
-3. Plug the board into the PC using the USB-C port labelled **COM** / **UART** (the one
+All ESP32 code in this project is built with **PlatformIO**, like the Uno project in
+`controller/reference-uno/ShuttlecockLauncher/`.
+
+1. VS Code or Cursor with the **PlatformIO IDE** extension (already installed for the Uno
+   project).
+2. Plug the board into the PC using the USB-C port labelled **COM** / **UART** (the one
    going through the USB-serial chip). This is the most reliable port for uploads.
    Windows 11 normally installs the CH343 / CP2102 driver by itself; if no COM port appears,
-   the chip's driver has to be installed manually.
-4. *Tools* menu settings for the N16R8 board:
+   the chip's driver has to be installed manually. PlatformIO finds the port on its own.
+3. `platformio.ini` for this board (N16R8: 16 MB QIO flash, 8 MB octal PSRAM):
 
-   | Setting | Value |
-   |---|---|
-   | Board | **ESP32S3 Dev Module** |
-   | Port | the COM port that appeared when plugging in |
-   | USB CDC On Boot | **Disabled** when using the COM/UART port. (**Enabled** if you use the native "USB" port for the serial monitor) |
-   | CPU Frequency | 240 MHz (WiFi) |
-   | Flash Mode | QIO 80 MHz |
-   | Flash Size | **16MB (128Mb)** |
-   | Partition Scheme | **16M Flash (3MB APP/9.9MB FATFS)** |
-   | PSRAM | **OPI PSRAM** (choosing "QSPI PSRAM" on an R8 board boot-loops with a PSRAM error) |
-   | Upload Speed | 921600 |
-   | Upload Mode | UART0 / Hardware CDC |
-   | USB Mode | Hardware CDC and JTAG |
-   | Core Debug Level | None |
+   ```ini
+   [env:esp32s3]
+   ; pioarduino: community build of the Espressif platform with arduino-esp32 core 3.x
+   platform = https://github.com/pioarduino/platform-espressif32/releases/download/stable/platform-espressif32.zip
+   board = esp32-s3-devkitc-1
+   framework = arduino
 
-5. If an upload fails with "Failed to connect", hold **BOOT**, tap **RST**, release BOOT,
+   board_build.arduino.memory_type = qio_opi    ; QIO flash + OPI (octal) PSRAM = N16R8
+   board_build.flash_mode = qio
+   board_upload.flash_size = 16MB
+   board_upload.maximum_size = 16777216
+   board_build.partitions = default_16MB.csv
+   build_flags =
+       -DBOARD_HAS_PSRAM
+
+   monitor_speed = 115200
+   monitor_echo = yes                           ; show what you type in the serial monitor
+   lib_deps =
+       madhephaestus/ESP32Servo
+   ```
+
+4. If an upload fails with "Failed to connect", hold **BOOT**, tap **RST**, release BOOT,
    then upload again.
 
-About `Serial`: with *USB CDC On Boot = Disabled*, `Serial` is UART0 and appears on the COM
-port. With it *Enabled*, `Serial` is the native USB port and UART0 becomes `Serial0`.
-Pick one setup and stick with it.
+Why the pioarduino platform: PlatformIO's official `espressif32` platform has long shipped
+arduino-esp32 core 2.x, while the code in these docs uses core 3.x calls (`ledcAttach`,
+`rgbLedWrite`). The code comments name the 2.x equivalents in case the official platform is
+used. Smoke test 1 below proves the memory settings: if it reports 0 bytes of PSRAM, the
+`memory_type` line is wrong for this board.
+
+About `Serial`: by default `Serial` is UART0 and appears on the COM port. Adding
+`-DARDUINO_USB_CDC_ON_BOOT=1` to `build_flags` moves `Serial` to the native "USB" port and
+UART0 becomes `Serial0`. This project uses the COM port; pick one setup and stick with it.
+
+Every smoke test in these docs is a complete `src/main.cpp` for a project with the config
+above. Its first line is `#include <Arduino.h>`: the Arduino IDE adds that silently,
+PlatformIO does not. Once `controller/firmware/` exists, each smoke test becomes its own
+environment there, the way the Uno project did it with `build_src_filter`.
 
 ## Smoke test 1: LED + serial
 
 ```cpp
-// Blink the onboard RGB LED and print. Board: ESP32S3 Dev Module, arduino-esp32 core 3.x
+#include <Arduino.h>
+
+// Blink the onboard RGB LED and print. arduino-esp32 core 3.x
 #ifndef RGB_BUILTIN
 #define RGB_BUILTIN 48   // try 38 if nothing lights up
 #endif
@@ -154,12 +173,29 @@ void loop() {
 ```
 
 Expected: LED cycles red/green/off, serial monitor at 115200 baud prints a line every
-1.2 s with PSRAM ≈ 8 388 608. If PSRAM prints 0, the *PSRAM* setting is wrong.
+1.2 s with PSRAM ≈ 8 388 608. If PSRAM prints 0, the `memory_type` line in `platformio.ini` is wrong.
 
 ## Smoke test 2: Wi-Fi
 
-*File → Examples → WiFi → WiFiScan*. Upload, open the serial monitor. Your home network must
-appear in the list. This proves the radio and antenna work before any web-server code exists.
+```cpp
+#include <Arduino.h>
+#include <WiFi.h>
+
+void setup() {
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+}
+
+void loop() {
+  int n = WiFi.scanNetworks();
+  Serial.printf("%d networks\n", n);
+  for (int i = 0; i < n; i++) Serial.printf("  %-32s %4d dBm\n", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+  delay(5000);
+}
+```
+
+Your home network must appear in the list every 5 s. This proves the radio and antenna work
+before any web-server code exists.
 
 ## Common pitfalls
 

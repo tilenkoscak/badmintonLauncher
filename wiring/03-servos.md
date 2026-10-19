@@ -1,43 +1,49 @@
-# 03 · The two feeder servos
+# 03 · The two feeder servos: arms and lift
 
 **Miuzei 15 kg digital servo**, metal gear, 180° (Amazon.de B0C4T73SMB). Operating voltage
 **4.8–7.4 V**, pulse 0.5–2.5 ms at 50 Hz, 0.13 s per 60°, stall current not published
 (assume 2–3 A each when stalled).
 
-| Servo | Signal GPIO | Uno pin it replaces |
-|---|---|---|
-| Arms servo (`SERVO_ARMS`) | GPIO 10 | 10 |
-| Spoon servo (`SERVO_SPOON`) | GPIO 11 | 11 |
+Both servos ride on the feeder carriage of the redesigned feeder (2026-10; cycle and park
+routine in `controller/README.md`):
 
-Roles and working positions come from the Uno code (`controller/reference-uno/README.md`):
+| Servo | Signal GPIO | Mechanism | Fixed positions |
+|---|---|---|---|
+| Arms servo (`SERVO_ARMS`) | GPIO 10 | Two arms coupled by gears; closing them grabs the shuttle at the cork, at the bottom of the shuttle tube | OPEN, CLOSED |
+| Lift servo (`SERVO_LIFT`) | GPIO 11 | A pinion on the servo drives a vertical gear rack; the rack carries the arms servo | BOTTOM, TOP |
 
-| Servo | Closed | Open | Other | Settle delays used |
-|---|---|---|---|---|
-| Arms | 10° | 40° | – | open 550 ms, close 300 ms |
-| Spoon | 180° | 0° | guiding position 105° | open 600 ms, close 750 ms, guiding 600 ms |
+The lift servo replaces the Uno-era "spoon" servo on the same pin. The Uno angles (arms
+10°/40°, spoon 180°/105°/0°) belong to the old mechanism and are not reused.
 
-These are Uno `Servo` degrees, i.e. pulses between 544 and 2400 µs. Use the same range in
-ESP32Servo (`attach(pin, 544, 2400)`) or the positions shift by a few degrees.
-
-> ❓ **OPEN:** Still needed: what the arms and the spoon physically do to a shuttle
-> (`PARTS.md` #4), so the firmware can name states and detect a failed feed.
+> ❓ **OPEN:** Before I put default angles into `config.h` I need the four positions of the
+> redesigned mechanism (arms OPEN and CLOSED, lift BOTTOM and TOP) and the time each move
+> needs to settle. If they are not known yet, the smoke test below finds them in a few minutes.
 
 ## What changes compared with the Uno
 
 - The Uno's `Servo.h` does not exist for ESP32. Use the **ESP32Servo** library
-  (Library Manager → "ESP32Servo" by Kevin Harrington). Same `attach()` / `write()` API.
+  (`lib_deps = madhephaestus/ESP32Servo` in `platformio.ini`). Same `attach()` / `write()` API.
 - Signal is 3.3 V instead of 5 V. Digital servos of this class accept it. If a servo ignores
   the ESP32 but worked on the Uno, that is the one exception, and a single transistor or a
   74HCT125 buffer fixes it.
 - Servo power must **not** come from the ESP32 board and, in this build, not from the same
   regulator as the ESP32 either.
 
+## Pulse range
+
+The firmware uses the servo's own range, **500–2500 µs** for 0–180°. The Uno `Servo` library
+used 544–2400 µs, so an angle found on the Uno lands a few degrees off on the ESP32. Angles
+found with the smoke test below are already in the firmware's range. The rule: find angles
+and use them with the same pulse range.
+
 ## Power
 
 The prototype feeds the servos from the 24 V rail through a **MEAN WELL N7805-1CW**
 (5 V, **1 A**; confirmed to be the 5 V part, which is right for these servos). Two 15 kg
 servos can pull several amps for a moment; when they do, the N7805's overload protection
-drops the rail and the servos twitch. Recommended split, see `05-power.md`:
+drops the rail and the servos twitch. The redesign adds holding load: the lift servo holds
+the arms servo against gravity, and the arms servo holds its grip on a cork. Recommended
+split, see `05-power.md`:
 
 | Consumer | Supply |
 |---|---|
@@ -55,7 +61,7 @@ output and keep the ESP32 off that rail.
               ┌───────────────┴───────────────┐
               │  470–1000 µF                  │
               │  across the rail              │
-  Arms servo  │                               │  Spoon servo
+  Arms servo  │                               │  Lift servo
   ┌────────┐  │                               │  ┌────────┐
   │ brown  ├──┼── GND ──── common GND ─── GND ─┼──┤ brown  │
   │ red    ├──┘                               └──┤ red    │
@@ -69,47 +75,83 @@ output and keep the ESP32 off that rail.
 |---|---|
 | Brown | Servo rail GND, which is the common ground shared with the ESP32 |
 | Red | Servo rail V+ (5–6 V) |
-| Orange | ESP32 GPIO 10 (arms) or GPIO 11 (spoon) |
+| Orange | ESP32 GPIO 10 (arms) or GPIO 11 (lift) |
 
 - The 470–1000 µF capacitor across the servo rail absorbs the current spike when a servo
   starts or stalls.
 - Route servo power wires away from the ESP32 board. Only the signal wires and one ground go
   to the ESP32 side.
+- **Both servos move with the carriage, and the arms servo also moves up and down.** Use
+  flexible extension leads with a slack loop (or a small drag chain) and strain relief at both
+  ends, so the leads never pull on the servo connectors or snag on the tube.
 
-## Smoke test: open and close both servos
+## Smoke test: find the four angles
 
-Servo rail on, ESP32 on USB, common GND connected. **If the servos are mounted in the
-feeder, retract the feeder first** and use only the angles below; the Uno code warns that
-90° (where a servo goes after a bare `attach()`) makes the arms hit an obstacle and the spoon
-block the feeder. That is why each servo is written to its closed position in the same line
-it is attached.
+Servo rail on, ESP32 on USB, common GND, wheels off, carriage away from the tube. The sketch
+sends no pulse to a servo until its first command, so nothing moves at power-up. In the
+serial monitor, type a command and press Enter.
 
 ```cpp
+#include <Arduino.h>
 #include <ESP32Servo.h>
 
-Servo arms, spoon;
+// Feeder servo angle finder. Serial monitor at 115200 baud:
+//   a 90   -> arms servo to 90°
+//   l 45   -> lift servo to 45°
+// A servo gets no pulses, and so does not move, until its first command.
+
+const int ARMS_PIN = 10, LIFT_PIN = 11;
+const int PULSE_MIN_US = 500, PULSE_MAX_US = 2500;   // Miuzei spec; the firmware uses the same
+
+Servo arms, lift;
+
+void moveServo(Servo &s, int pin, const char *name, int deg) {
+  deg = constrain(deg, 0, 180);
+  if (!s.attached()) {
+    s.setPeriodHertz(50);
+    s.attach(pin, PULSE_MIN_US, PULSE_MAX_US);
+  }
+  s.write(deg);
+  Serial.printf("%s -> %d deg\n", name, deg);
+}
 
 void setup() {
-  arms.setPeriodHertz(50);
-  spoon.setPeriodHertz(50);
-  arms.attach(10, 544, 2400);  arms.write(10);     // Uno Servo pulse range, closed at once
-  spoon.attach(11, 544, 2400); spoon.write(180);   // closed at once
-  delay(1000);
+  Serial.begin(115200);
+  Serial.println("a <deg> = arms servo, l <deg> = lift servo");
 }
 
 void loop() {
-  arms.write(40);   delay(550);   // arms open
-  arms.write(10);   delay(300);   // arms closed
-  spoon.write(105); delay(600);   // spoon guiding position
-  spoon.write(0);   delay(600);   // spoon open
-  spoon.write(180); delay(750);   // spoon closed
-  delay(1500);
+  if (!Serial.available()) return;
+  String cmd = Serial.readStringUntil('\n');
+  cmd.trim();
+  if (cmd.length() < 3) return;
+  int deg = cmd.substring(2).toInt();
+  if (cmd[0] == 'a') moveServo(arms, ARMS_PIN, "arms", deg);
+  if (cmd[0] == 'l') moveServo(lift, LIFT_PIN, "lift", deg);
 }
 ```
 
-Expected: the same open/close pattern as the prototype's reload cycle, minus the feeder
-stroke. Jitter or twitching = servo rail too weak or missing capacitor. A servo that never
-moves = check the signal pin number and that the servo GND is connected to the ESP32 GND.
+Procedure:
+
+1. On its first command a servo jumps to the commanded angle at full speed and full torque.
+   If the mechanism cannot take an arbitrary angle (rack at its end, arms against each other),
+   unmesh the pinion or take the arms off for that first command, then re-mesh at the
+   position just commanded.
+2. Move in small steps (5°, then 1–2°) towards each end position. Stop as soon as the servo
+   hums at rest: it is pushing against the mechanism. Back off 2–3° from there. A 15 kg servo
+   held in stall overheats and strips the rack.
+3. For CLOSED, use a shuttle: the arms should hold the cork firmly. Every degree past first
+   contact adds holding current and heat, so stop just past it.
+4. Note `ARMS_OPEN`, `ARMS_CLOSED`, `LIFT_BOTTOM` and `LIFT_TOP` (arms around the cork of the
+   lowest shuttle in the tube), and roughly how long each move takes. The spec gives about
+   0.2 s per 90° without load; double that under load and add margin.
+5. Write the values into this file in place of the open note above.
+
+Jitter or twitching = servo rail too weak or missing capacitor. A servo that never moves =
+check the signal pin number and that the servo GND is connected to the ESP32 GND.
+
+Later the web app gets a feeder setup screen that does the same and stores the angles in
+flash, so a re-adjustment does not need re-flashing.
 
 Note for the firmware: ESP32Servo and the wheel PWM both use the LEDC hardware timers.
 The ESP32-S3 has 8 channels, this project uses 4 (2 servos + 2 wheels), so there is no

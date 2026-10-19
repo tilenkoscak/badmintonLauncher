@@ -1,8 +1,9 @@
-# 04 · Launch wheels: two 775 DC motors on a PWM rail
+# 04 · Launch wheels: two 775 DC motors on the 12 V PWM rail
 
 Draft. The wheel chain is known and matches the prototype: buck → fuse → MOSFET module with
 a 1000 µF buffer and a TVS on its input → motor with a Schottky flyback diode across it.
-The one open decision is the rail voltage: **24 V today, 12 V recommended**.
+The rail is becoming **12 V**: a 36/48 V → 12 V, 30 A buck is ordered and replaces the
+prototype's 24 V one. Until it is fitted, see "Until the new buck arrives" below.
 
 | Signal | GPIO | Notes |
 |---|---|---|
@@ -14,8 +15,8 @@ The one open decision is the rail voltage: **24 V today, 12 V recommended**.
 
 ```
  buck output ──► fuse ──┬──────────┬──────► DC+ ┌──────────────────┐ OUT+ ─────────────┬────────── 775 (+)
- (24 V today,           │          │            │  MOSFET module   │                   │
-  12 V recommended)  1000 µF   1.5KE30A         │  15 A / 400 W    │              E83-004 Schottky
+ (12 V rail)            │          │            │  MOSFET module   │                   │
+                     1000 µF   1.5KE30A         │  15 A / 400 W    │              E83-004 Schottky
                       50 V     band to DC+      │  low-side switch │              cathode to OUT+
                         │          │            │                  │              anode to OUT−
  star GND ──────────────┴──────────┴──────► DC− │  PWM   GND       │ OUT− ─────────────┴────────── 775 (−)
@@ -28,49 +29,57 @@ The one open decision is the rail voltage: **24 V today, 12 V recommended**.
 
 | Part | Position | Role |
 |---|---|---|
-| Buck 36 V → 24 V (or 12 V) | Feeds both branches | Fixed-output IP68 module. The 36 V / 9.7 A PSU output behind it allows ≈ 13 A at 24 V or ≈ 26 A at 12 V |
-| Fuse | In series, one per branch | 10 A automotive blade on 24 V, 15 A on 12 V. Wiring protection |
+| Buck 36 V → 12 V, 30 A (ordered; the 24 V one until it arrives) | Feeds both branches | Fixed-output IP68 module. The 36 V / 9.7 A PSU output behind it allows ≈ 26 A at 12 V for both wheels together |
+| Fuse | In series, one per branch | 15 A automotive blade. Wiring protection |
 | 1000 µF / 50 V | Across DC+ / DC− of the module | Buffers the PWM current pulses so the buck and the wiring see a smooth current |
-| 1.5KE30A TVS | Across DC+ / DC− of the module, band to DC+ | Clamps rail transients (switching spikes, buck overshoot) before they reach the module. Stand-off 25.6 V, breakdown ≥ 28.5 V |
-| MOSFET module 15 A / 400 W | Between rail and motor | **Low-side**: OUT+ is tied to DC+ inside the module, the MOSFETs switch OUT−. Trigger input accepts 3.3 V, so the ESP32 drives it directly. Heatsink above ~10 A |
+| 1.5KE30A TVS | Across DC+ / DC− of the module, band to DC+ | Clamps rail transients (switching spikes, buck overshoot) before they reach the module. Stand-off 25.6 V: comfortable margin on 12 V |
+| MOSFET module 15 A / 400 W | Between rail and motor | **Low-side**: OUT+ is tied to DC+ inside the module, the MOSFETs switch OUT−. Trigger input accepts 3.3 V, so the ESP32 drives it directly. Heatsink it: steady current is low, spin-up peaks are not |
 | E83-004 Schottky, 40 V / 60 A | Across OUT+ / OUT−, cathode to OUT+ | **Flyback diode.** When the MOSFET turns off, the motor's inductance keeps current flowing; this diode gives it a path. Carries the motor current during the off-time only, ≈ 1–2 W at full power, a small heatsink or none |
 | 775 motor | OUT+ / OUT− | 12 V, 150 W. Leads swapped on one wheel for counter-rotation |
 
-## Rail voltage: 24 V today, 12 V recommended
+## Why 12 V
 
-The motors are rated **12 V**. On the 24 V rail, average motor voltage = duty × 24 V, so
-100 % duty would run them at twice their rating (about 20 000 rpm; four times the rim stress
-in the disks). Two ways to handle it:
+The motors are rated **12 V**. On the prototype's 24 V rail the average motor voltage is
+duty × 24 V, so 100 % duty would run them at twice their rating (about 20 000 rpm, four times
+the rim stress in the disks), and only a firmware constant prevented it. On the 12 V rail the
+hardware limits the speed to the rated 10 000 rpm, the whole duty range is usable, and the
+brushes see 12 V pulses instead of 24 V ones (less arcing, heat and noise).
 
-| | 24 V rail (as is) | 12 V rail (recommended) |
-|---|---|---|
-| Speed limit | Firmware constant `WHEEL_MAX_DUTY ≈ 50 %`. One bug or one test sketch without it = 2× overspeed | Hardware. Full duty is safe |
-| Motor stress | 24 V pulses on brushes and commutator: more arcing, heat and noise for the same speed | Within rating |
-| Control | Duty→speed is repeatable but twice as steep; usable range is 0–512 of 1023 | Full 0–1023 range |
-| Spin-up | Faster: higher torque at low duty | Normal |
-| Parts | Nothing to buy | Buck 36/48 V → 12 V, 30 A, same IP68 family. Everything else stays |
-
-Until a 12 V buck is fitted, the firmware carries a hard constant
+The firmware still carries the cap, derived from the rail voltage it is told:
 
 ```
-WHEEL_MAX_DUTY = 50 %      // 12 V average on a 24 V rail; becomes 100 % on a 12 V rail
+WHEEL_RAIL_V   = 24                               // set to 12 once the new buck is fitted and measured
+WHEEL_MAX_DUTY = min(100 %, 12 V / WHEEL_RAIL_V)  // 50 % on 24 V, 100 % on 12 V
 ```
 
-that the UI cannot exceed. The UI's "100 % speed" maps to the cap.
+It ships with 24, so the firmware is safe on whichever buck is fitted. The UI's "100 % speed"
+maps to the cap.
 
-Current ripple is the other thing to know here. It grows with rail voltage and shrinks with
-PWM frequency: at the Uno's ~1 kHz on a low-inductance 775, the current ripple on 24 V is
-enormous (heat, brush arcing, noise); at 16 kHz it is a few amps on either rail. So whichever
-rail is used, run the modules near their 20 kHz limit.
+Current ripple grows with rail voltage and shrinks with PWM frequency. At the Uno's ~1 kHz a
+low-inductance 775 sees a large ripple current (heat, brush arcing, noise); at 16 kHz it is
+small. So the modules run near their 20 kHz limit.
+
+Current draw on 12 V: at steady speed a flywheel needs only a few amps (bearing and air
+losses). The peaks come at spin-up, when a 775 pulls tens of amps for a moment. PSU output 2
+delivers about 26 A at 12 V for both wheels together, which is why the firmware ramps over
+1–2 s and starts the second wheel after the first.
 
 What the Uno code tells us (`controller/reference-uno/README.md`): the only wheel program is
 a single-motor test at 980 Hz that kicks at duty 255 for 200 ms, drops to duty 100 and ramps
 to 255 and back. So a 775 has already seen full duty on the 24 V rail, at least without a
 shuttle. No shot-tuning values were recorded.
 
-> ❓ **OPEN:** Tilen decides between the two columns (`PARTS.md` #7). Also useful: the duty
-> (0–255) that gave a good shot in manual tests, if that was ever tried. Above 128 means those
-> shots already used more than 12 V average, and a 12 V rail would shorten the maximum range.
+> ❓ **OPEN:** If shots were ever tuned by hand on the prototype, I need the duty (0–255 on
+> the 24 V rail) that gave a good shot. Above 128 is out of reach on 12 V, which would reopen
+> the rail question.
+
+## Until the new buck arrives
+
+- The 24 V buck stays in, and the firmware keeps `WHEEL_RAIL_V = 24`.
+- Every wheel test stays at or below 50 % duty. The smoke test below uses 25 %.
+- When the 12 V buck arrives: fit it, measure its output without load and then with one
+  wheel at 50 % duty (expect 12 V ± 0.5 V), fit 15 A fuses and 2.5 mm² wire, and only then
+  set `WHEEL_RAIL_V = 12`.
 
 ## Direction
 
@@ -99,7 +108,7 @@ one motor are swapped. Mark the wheels L and R and the motor leads + / − once 
 
 ## Wiring rules for the power side
 
-- Motor and rail wires: ≥ 1.5 mm² (2.5 mm² on a 12 V rail), twisted pair per motor, short,
+- Motor and rail wires: 2.5 mm², twisted pair per motor, short,
   away from the ESP32, its antenna and the stepper/servo signal wires.
 - 0.1 µF ceramic across each motor's terminals against brush noise.
 - Both modules on heatsinks. The E83-004 tabs are cathodes: insulating washers if they share
@@ -124,6 +133,8 @@ Wheel rail on, ESP32 on USB, common GND, motor with bare shaft. Ramps wheel L to
 (core 2.x: `ledcSetup` + `ledcAttachPin` + `ledcWrite(channel, duty)`).
 
 ```cpp
+#include <Arduino.h>
+
 const int WHEEL_L_PWM = 12;
 const int WHEEL_PWM_HZ = 16000;  // module limit is 20 kHz; drop to 10 kHz if it runs hot
 const int TEST_MAX_DUTY = 256;   // 25 % of 1023, safe on either rail
@@ -149,4 +160,6 @@ switch off, fuse, or missing ground between ESP32 and module header.
 
 - RPM sensor per wheel (Hall sensor + magnet, or optical) and a PI loop, so a given "speed"
   gives the same launch distance regardless of rail voltage sag.
+- Current sensing per wheel: a 775 on 12 V can stall at tens of amps if a shuttle jams, and
+  the MOSFET module has no protection of its own.
 - A proper H-bridge / ESC if braking or reversing is ever wanted.

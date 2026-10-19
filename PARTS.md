@@ -17,16 +17,16 @@ the three steppers, the dual-output power supply and the optical endstop.
 | 1 | ESP32-S3 dev board, N16R8, 44 pins, USB-C | 1 | Main controller: Wi-Fi access point, web server, all motion | Module variant known; board details to verify |
 | 2 | DRV8825 stepper driver carrier, 100 µF/50 V capacitor already fitted | 3 | Pan, tilt and feeder steppers | Known part; sense-resistor marking to verify |
 | 3 | NEMA 17 stepper from the Sidewinder X3 Plus (2 × Z-axis type "42-35", 1 × from another axis) | 3 | Pan, tilt, feeder | Size known; rated current estimated 1.2–1.7 A, label to read |
-| 4 | Miuzei 15 kg digital servo, metal gear, 180° | 2 | Feeder: "arms" servo and "spoon" servo | 4.8–7.4 V, powered at 5 V; working angles known from the Uno code |
-| 5 | 775 brushed DC motor, 12 V, 150 W, 10 000 rpm | 2 | Launch wheels | Known from listing. **On a 24 V rail today, 12 V buck recommended, see #7** |
+| 4 | Miuzei 15 kg digital servo, metal gear, 180° | 2 | Feeder: arms servo (gripper) and lift servo (rack and pinion), both on the carriage | 4.8–7.4 V, powered at 5 V; angles of the redesigned mechanism to find |
+| 5 | 775 brushed DC motor, 12 V, 150 W, 10 000 rpm | 2 | Launch wheels | Known from listing. Moving to a 12 V rail, see #7 |
 | 6 | Artillery X3 Plus power supply, two outputs: 24 V / 4.2 A and 36 V / 9.7 A | 1 | Everything | Ratings known; model label and output isolation to verify |
-| 7 | Buck converter 36 V → 24 V, IP68 potted module | 1 | Wheel rail | Family known. **Recommended: replace with the 12 V / 30 A sibling** |
+| 7 | Buck converter for the wheel rail: 36/48 V → 12 V, 30 A, IP68 potted module | 1 | Wheel rail | **Ordered.** Replaces the 36 → 24 V module, which stays in until it arrives |
 | 8 | Fuji Electric E83-004 Schottky diode, 40 V, 60 A, TO-3P | 2 | Flyback diode across each wheel motor (MOSFET module output) | Known, correctly placed |
 | 9 | Dual-MOSFET PWM switch module, DC 5–36 V, 15 A (30 A peak), 400 W | 2 | Speed control of each launch wheel | Known; trigger 3.3–20 V, PWM 0–20 kHz |
 | 10 | Electrolytic capacitor 1000 µF / 50 V | 2 | Buffer across each MOSFET module input | Known, correctly placed |
 | 11 | TVS diode 1.5KE30A | 2 | Over-voltage clamp across each MOSFET module input | Known, correctly placed |
 | 12 | MEAN WELL N7805-1CW switching regulator, 5 V / 1 A | 1 | 24 V → 5 V, today for the servos | Confirmed 5 V. **Undersized for two 15 kg servos** |
-| 13 | Optical endstop from the Sidewinder X3 Plus | 1 | Feeder home and safety limit | Role and logic known from the Uno code (LOW when triggered); model and 3.3 V behaviour to confirm |
+| 13 | Optical endstop from the Sidewinder X3 Plus | 1 | Home of the feeder carriage and overtravel guard | Logic known from the Uno code (LOW when triggered); model, 3.3 V behaviour and position on the new carriage to confirm |
 | 14 | Arduino Uno | 1 | Prototype controller, being replaced | Its code is in `controller/reference-uno/` |
 
 ---
@@ -102,8 +102,9 @@ believed to be the same size and rating.
 | Wiring | Bipolar, 4 wires, Artillery motors come with a JST-XH plug (4-pin, or 6-pin with 4 populated) |
 
 What the Uno code adds (`controller/reference-uno/README.md`): the feeder driver ran at
-1/8 microstepping with M0 and M1 tied together and driven HIGH, one feed stroke is
-2.5 revolutions forward and back, and the feeder homes against the optical endstop (#13).
+1/8 microstepping with M0 and M1 tied together and driven HIGH, and the old feeder homed
+against the optical endstop (#13). In the redesigned feeder the stepper moves a carriage
+between PARK, the shuttle tube and the wheels (`controller/README.md`).
 Pan and tilt ran at a gentle 50 RPM with a software multiplier of 2, but the code's comments
 and the shared microstep pin disagree about the actual jumpering of those two drivers.
 
@@ -111,9 +112,9 @@ and the shared microstep pin disagree about the actual jumpering of those two dr
 > for each motor, the text printed on its label (model number and current, e.g. "42HB34F...
 > 1.3A" or "17HS15-1504S") and which motor sits on which axis (pan / tilt / feeder). If the
 > third motor is not a 42-35, its label tells us. I also need the gear or belt ratio between
-> each stepper and its axis, what the feeder stepper drives (a lead screw? a rack? how far do
-> 2.5 revolutions move it?), and which M0/M1/M2 pins of the pan and tilt drivers were wired
-> to Uno pin 9.
+> each stepper and its axis, what moves the feeder carriage (lead screw, belt or rack; only
+> needed to show millimetres in the app), and which M0/M1/M2 pins of the pan and tilt drivers
+> were wired to Uno pin 9.
 
 ## 4. Hobby servos (×2, feeder)
 
@@ -133,23 +134,21 @@ Amazon.de B0C4T73SMB: **Miuzei Digital Servo 15 kg, metal gear, 180°** (sold as
 Powered at **5 V** from the 24 V rail through the MEAN WELL N7805 (#12). Confirmed correct;
 the "12 V" in the first prototype notes was a slip.
 
-Roles and working positions, from the Uno code (`controller/reference-uno/README.md`), in
-Uno `Servo` degrees (pulse range 544–2400 µs):
+Roles in the **redesigned feeder** (2026-10). Both servos ride on the carriage that the
+feeder stepper moves between PARK, the shuttle tube and the wheels:
 
-| Servo | Uno pin | Closed | Open | Other | Settle delays |
-|---|---|---|---|---|---|
-| Arms (`armsServo`) | 10 | 10° | 40° | – | open 550 ms, close 300 ms |
-| Spoon (`spoonServo`) | 11 | 180° | 0° | guiding position 105° | open 600 ms, close 750 ms, guiding 600 ms |
+| Servo | GPIO | Mechanism | Fixed positions |
+|---|---|---|---|
+| Arms servo | 10 | Two arms coupled by gears; closing them grabs the shuttle at the cork, at the bottom of the shuttle tube | OPEN, CLOSED |
+| Lift servo (formerly "spoon") | 11 | A pinion on the servo drives a vertical gear rack; the rack carries the arms servo | BOTTOM, TOP |
 
-One shuttle: arms open → arms close → spoon to guiding → spoon open → feeder 2.5 revolutions
-forward → wait 2 s → feeder back → spoon close. Both servos must be commanded to their closed
-position immediately after `attach()`, and the feeder must be retracted before any servo
-moves; at the default 90° the arms hit an obstacle and the spoon blocks the feeder.
+The feed cycle and the park routine are specified in `controller/README.md` ("Feeder state
+machine"). The Uno-era angles (arms 10°/40°, spoon 180°/105°/0°) belong to the old mechanism.
 
-> ❓ **OPEN:** The sequence is known; what I still need is one sentence each on what the
-> "arms" and the "spoon" physically do to a shuttle (release one from the stack? cradle it into
-> the feeder channel?), so the web app can name things properly and the state machine can
-> detect a failed feed.
+> ❓ **OPEN:** Before I put default angles into the firmware I need the four positions of the
+> redesigned mechanism (arms OPEN and CLOSED, lift BOTTOM and TOP) and the settle time of each
+> move, if known. Otherwise the angle-finder smoke test in `wiring/03-servos.md` gives them in
+> a few minutes.
 
 ## 5. 775 brushed DC motors, 12 V, 150 W (×2, launch wheels)
 
@@ -170,19 +169,19 @@ MOSFET modules (#9). The module switches one direction only, so the counter-rota
 from swapping the two motor leads on one wheel. Details in
 `wiring/04-launch-wheels-dc-motors.md`.
 
-**Rail voltage:** in the prototype these 12 V motors hang on the **24 V** output of the buck
-converter (#7). At 100 % PWM duty they would run at twice their rating. Recommended fix is a
-12 V buck (see #7). Until that is fitted, the firmware carries a hard cap `WHEEL_MAX_DUTY`
-of about 50 % (12 V average).
+**Rail voltage:** in the prototype these 12 V motors hang on the **24 V** output of the old
+buck converter, where 100 % PWM duty would run them at twice their rating. A 12 V / 30 A buck
+is ordered (#7). The firmware derives its duty cap from `WHEEL_RAIL_V` and ships with 24
+(cap 50 %) until the new buck is fitted and measured.
 
 The only wheel code on the Uno is a single-motor test (`launcher_motors_control.ino`): PWM
 on pin 5 at 980 Hz, a 200 ms kick at duty 255, then duty 100 (39 %) and a ramp to 255 and
 back. So a 775 has already run at full duty on the 24 V rail, but there is no record of which
 duty produced a good shot.
 
-> ❓ **OPEN:** Before I can judge whether a 12 V rail loses any launch range I need the duty
-> (0–255) that gave a good shot in manual tests, if that was ever tried. Above 128 means those
-> shots already used more than 12 V average. I also need to know whether the two wheels must
+> ❓ **OPEN:** Before I can judge whether the 12 V rail loses any launch range I need the duty
+> (0–255, on the 24 V rail) that gave a good shot in manual tests, if that was ever tried.
+> Above 128 is out of reach on 12 V. I also need to know whether the two wheels must
 > be adjustable independently (spin shots) or always run at the same speed.
 
 ## 6. Power supply: Artillery Sidewinder X3 Plus PSU (dual output)
@@ -203,9 +202,9 @@ option from the first draft is dropped.
 > inside the PSU or must be joined at our star point.) Also whether the PSU has a mains switch
 > and whether it came with its fan.
 
-## 7. Buck converter 36 V → 24 V (wheel rail), replacement recommended
+## 7. Buck converter for the wheel rail: 12 V / 30 A ordered
 
-AliExpress 1005006451305852: *DC DC 36V 48V to 24V 1A 2A 3A 5A 10A 15A 20A 30A Step Down
+The module in the prototype, AliExpress 1005006451305852: *DC DC 36V 48V to 24V 1A 2A 3A 5A 10A 15A 20A 30A Step Down
 … 480W Buck Converter IP68 Waterproof*. A potted aluminium module with wire leads,
 **fixed 24 V output**, sold in current variants from 1 A to 30 A; the 36/48 V version accepts
 30–60 V input. Non-isolated (input − and output − are the same node) as is usual for this type.
@@ -213,27 +212,24 @@ AliExpress 1005006451305852: *DC DC 36V 48V to 24V 1A 2A 3A 5A 10A 15A 20A 30A S
 Fed from PSU output 2 (36 V / 9.7 A ≈ 350 W), so the rail can deliver at most about
 **13 A at 24 V** or **26 A at 12 V** (≈ 90 % efficiency) before the PSU limits.
 
-**Recommendation: replace it with the 12 V / 30 A module of the same IP68 family**
-(sold as "36V/48V to 12V 30A 360W"). Reasons:
+**Decision (2026-10-05): a 12 V / 30 A module of the same IP68 family is ordered**
+(sold as "36V/48V to 12V 30A 360W"). It replaces the 24 V module, which stays in until the
+new one arrives and then becomes a spare. Reasons:
 
 - With a 12 V rail the maximum wheel speed is limited by hardware. On 24 V it is limited
   only by a firmware constant; one bug or one test sketch without the cap spins the disks at
   ~20 000 rpm, where rim stress is four times the design value.
 - The motors run inside their rating: brushes and commutator see 12 V pulses instead of 24 V
   ones, less arcing, less heat, less electrical noise.
-- Firmware gets simpler: full duty range usable, no cap logic.
+- The full duty range becomes usable; the firmware's cap becomes 100 %.
 - 30 A rather than 20 A because the PSU can deliver ≈ 26 A at 12 V; a 20 A module would
   become the bottleneck during spin-up.
 - Everything else in the wheel chain (#8–#11) is fine at 12 V; nothing else changes.
   The 24 V module becomes a spare.
 
-The alternative, an adjustable 20 A step-down board set to 12–14 V, allows fine-tuning the
-speed ceiling but is open-frame, needs a fan, and is less robust in a machine that gets
-knocked about on a court.
-
-> ❓ **OPEN:** Tilen decides: buy the 12 V / 30 A buck (recommended), or keep the 24 V one with
-> the firmware cap. If the 24 V module stays, I need its current variant (printed on the
-> module) and its output voltage measured under load.
+When it arrives: measure its output without load and with one wheel at 50 % duty (expect
+12 V ± 0.5 V), then set `WHEEL_RAIL_V = 12` in the firmware. The full commissioning list is
+in `wiring/04-launch-wheels-dc-motors.md`, "Until the new buck arrives".
 
 ## 8. Schottky diode Fuji Electric E83-004 (×2), flyback across each motor
 
@@ -256,7 +252,7 @@ Switch Drive PWM Regulator Module*. The common 34 × 17 mm green module.
 
 | Property | Value |
 |---|---|
-| Load supply | DC 5 – 36 V (24 V today, 12 V after the buck swap) |
+| Load supply | DC 5 – 36 V (12 V once the new buck is fitted, 24 V until then) |
 | Current | 15 A continuous, 30 A peak, 400 W; heatsink needed above ~10 A |
 | Switch type | Two N-channel MOSFETs in parallel, **low-side**: OUT+ is internally tied to DC+, the MOSFETs switch OUT− |
 | Trigger / PWM input | **Digital 3.3 – 20 V** ⇒ drives directly from an ESP32 GPIO |
@@ -327,7 +323,8 @@ work), plan B is a resistor divider on SIGNAL.
 
 > ❓ **OPEN:** Before I finalize the endstop page I need a photo of the board (or its pin
 > labels and any part numbers), the result of the 3.3 V test in `wiring/06-optical-endstop.md`,
-> and a yes that the "feeding limiter" of the Uno code is this optical board.
+> a yes that the "feeding limiter" of the Uno code is this optical board, and where it sits on
+> the redesigned carriage's travel (behind PARK or in front of WHEELS).
 
 ## 14. Arduino Uno (prototype controller)
 
@@ -343,14 +340,14 @@ pins 10 and 11 were suspected faulty as inputs, which is irrelevant for the ESP3
 
 | Part | Why |
 |---|---|
-| **Buck converter 36/48 V → 12 V, 30 A, IP68** (same family as #7) | Puts the 775 motors on their rated voltage; hardware speed limit. See #7 |
 | 5–6 V buck converter, ≥ 3 A, fed from the 24 V rail | Servo supply; the N7805 (1 A) moves to the ESP32. See #12 |
 | Endstops for pan and tilt (optional) | The prototype taught pan/tilt limits with buttons at every start; the app will do the same and remember them. Endstops only if repeatable homing is wanted later |
 | Physical E-stop or switch in the wheel rail | Cuts the wheels without killing the ESP32 |
-| Fuses: 10 A per wheel branch on 24 V (15 A on 12 V), optional 4 A for the stepper branch | Wiring protection |
+| Fuses: 15 A per wheel branch (12 V rail), optional 4 A for the stepper branch | Wiring protection |
 | 470–1000 µF capacitor on the servo rail | Absorbs servo start/stall spikes |
 | 0.1 µF ceramic capacitor across each 775 motor | Brush noise that otherwise disturbs Wi-Fi and step signals |
-| Wire ≥ 1.5 mm² for the wheel branches (2.5 mm² on a 12 V rail) | Up to 13 A per branch at 12 V, more at spin-up |
+| Wire 2.5 mm² for the wheel branches | Spin-up peaks of tens of amps on the 12 V rail |
+| Flexible servo extension leads, slack loop or small drag chain | Both servos ride on the moving carriage, the arms servo also moves up and down |
 | Optional: shuttle-present sensor, RPM sensor per wheel | Feed confirmation, repeatable launch speed |
 
 ## Open questions checklist
@@ -359,10 +356,9 @@ Short version of every `❓ OPEN:` above, to answer in one go:
 
 1. ESP32 board: photo or pin labels; one or two USB-C ports; RGB LED pin; USB-serial chip; antenna type.
 2. DRV8825: sense-resistor marking, heatsinks, current Vref per driver; which M pins of the pan/tilt drivers were wired to Uno pin 9.
-3. Steppers: label text of each motor, which motor is on which axis, gear/belt ratios, what the feeder stepper drives and how far 2.5 revolutions move it.
-4. Servos: one sentence each on what "arms" and "spoon" physically do.
-5. 775 wheels: duty that gave a good shot in manual tests, if known; independent wheel speeds or not.
+3. Steppers: label text of each motor, which motor is on which axis, gear/belt ratios of pan and tilt, what moves the feeder carriage (optional).
+4. Servos: the four angles of the redesigned feeder (arms OPEN/CLOSED, lift BOTTOM/TOP) and settle times, or find them with the smoke test in `wiring/03-servos.md`.
+5. 775 wheels: duty that gave a good shot on the 24 V rail, if known; independent wheel speeds or not.
 6. PSU: model label; continuity between the two outputs' negatives; mains switch; fan.
-7. Buck converter: replace with 12 V / 30 A (recommended) or keep 24 V? If kept: variant and measured output voltage.
-8. MOSFET module: DC+ ↔ OUT+ continuity.
-9. Optical endstop: photo/pin labels; 3.3 V test; confirm it is the "feeding limiter" of the Uno code.
+7. MOSFET module: DC+ ↔ OUT+ continuity.
+8. Optical endstop: photo/pin labels; 3.3 V test; confirm it is the "feeding limiter" of the Uno code; where it sits on the carriage travel.

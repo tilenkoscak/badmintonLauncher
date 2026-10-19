@@ -7,13 +7,13 @@ so a subsystem is proven on the ESP32 before the next one is connected.
 
 | File | Subsystem | State |
 |---|---|---|
-| `01-esp32-s3-basics.md` | The ESP32-S3 board itself: which pins may be used, power, Arduino IDE setup | Draft. Board photo pending |
+| `01-esp32-s3-basics.md` | The ESP32-S3 board itself: which pins may be used, power, PlatformIO setup | Draft. Board photo pending |
 | `02-steppers-drv8825.md` | Pan, tilt and feeder steppers (Sidewinder X3 Plus motors) through DRV8825 on 24 V | Draft. Motor labels pending |
-| `03-servos.md` | The two Miuzei 15 kg feeder servos (arms and spoon) | Draft. Angles known from the Uno code |
-| `04-launch-wheels-dc-motors.md` | The two 775 motors: buck, MOSFET module with buffer and TVS, flyback diode | Draft. Rail voltage decision pending (24 V today, 12 V recommended) |
-| `05-power.md` | The Artillery dual-output PSU, rails, grounding, switching | Draft. PSU label and buck decision pending |
+| `03-servos.md` | The two Miuzei 15 kg feeder servos (arms and lift) and an angle-finder sketch | Draft. Angles of the redesigned feeder pending |
+| `04-launch-wheels-dc-motors.md` | The two 775 motors: buck, MOSFET module with buffer and TVS, flyback diode | Draft. 12 V buck ordered |
+| `05-power.md` | The Artillery dual-output PSU, rails, grounding, switching | Draft. PSU label pending |
 | `06-optical-endstop.md` | The salvaged optical endstop: the feeder's home sensor, its logic, 3.3 V | Draft. Board photo and 3.3 V test pending |
-| `pin-map.md` | One table with every GPIO in use | Draft v0.3 |
+| `pin-map.md` | One table with every GPIO in use | Draft v0.4 |
 
 Open questions are marked `❓ **OPEN:**` inside each file (convention in `CLAUDE.md`) and
 collected in the checklist at the end of `PARTS.md`.
@@ -27,15 +27,15 @@ collected in the checklist at the end of `PARTS.md`.
         ┌──────────────────┬──────────────────┬──────────────┴───┬──────────────────┐
         │ STEP/DIR/EN      │ STEP/DIR         │ STEP/DIR         │ PWM ×2           │ PWM ×2
         ▼                  ▼                  ▼                  ▼                  ▼
-   DRV8825 (pan)      DRV8825 (tilt)     DRV8825 (feed)     Arms + spoon servo  MOSFET module L / R
+   DRV8825 (pan)      DRV8825 (tilt)     DRV8825 (feed)     Arms + lift servo   MOSFET module L / R
         │                  │                  │                  │             (15 A, low-side)
         ▼                  ▼                  ▼                  ▼                  ▼
    Pan stepper        Tilt stepper       Feed stepper       5–6 V servo rail    775 motor L / R
-   (NEMA 17 42-35)    (NEMA 17 42-35)    (NEMA 17)          (Miuzei 15 kg)      (12 V motors, duty-capped)
+   (NEMA 17 42-35)    (NEMA 17 42-35)    (NEMA 17)          (Miuzei 15 kg)      (12 V motors, 12 V rail)
 
    Power: Artillery X3 Plus PSU
      output 1  24 V / 4.2 A ─► DRV8825 VMOT ×3, N7805 ─► 5 V ESP32, servo buck ─► 5–6 V servos
-     output 2  36 V / 9.7 A ─► buck (24 V today, 12 V recommended) ─► [E-STOP] ─► fuse ─► MOSFET module ─► 775 (+E83-004 flyback)
+     output 2  36 V / 9.7 A ─► buck 12 V / 30 A (ordered) ─► [E-STOP] ─► fuse ─► MOSFET module ─► 775 (+E83-004 flyback)
    All grounds meet at one star point. Motor current never passes through the ESP32 board.
 ```
 
@@ -56,13 +56,13 @@ collected in the checklist at the end of `PARTS.md`.
    the number used in code.
 7. **Keep motor wires away from signal wires** and away from the ESP32's Wi-Fi antenna.
    Twist each motor's wire pair. The 775 wires carry big, noisy currents.
-8. **The wheel rail is 24 V for 12 V motors until the buck is swapped for a 12 V one.** While
-   it is, the firmware duty cap is a safety feature, not a tuning parameter. Never test the
-   wheels with a sketch that lacks it.
+8. **The wheel motors are 12 V.** Until the ordered 12 V buck is fitted the rail is 24 V, and
+   every wheel test stays at or below 50 % duty. The firmware's `WHEEL_RAIL_V` must always
+   match the buck actually fitted.
 9. **Wire one subsystem at a time** and run its smoke test before adding the next.
 10. **Guard the launch wheels.** Never test them with the disks mounted until the driver and
     e-stop are proven with bare motor shafts.
-11. **Label every connector** (pan, tilt, feed, arms servo, spoon servo, wheel L/R, motor + / −).
+11. **Label every connector** (pan, tilt, feed, arms servo, lift servo, wheel L/R, motor + / −).
     Photograph the result and add the photo to this folder.
 
 ## Recommended build order
@@ -73,7 +73,7 @@ collected in the checklist at the end of `PARTS.md`.
    Five minutes, and it settles the level-shifting question early.
 3. One DRV8825 + the pan stepper on the 24 V rail. Then tilt, then feeder
    (`02-steppers-drv8825.md`).
-4. Both servos on their own 5–6 V rail (`03-servos.md`).
-5. Launch wheels with bare shafts, after measuring the buck output voltage with a meter
+4. Both servos on their own 5–6 V rail, then find their four angles (`03-servos.md`).
+5. Launch wheels with bare shafts, ideally after the 12 V buck is fitted and measured
    (`04-launch-wheels-dc-motors.md`).
 6. Final power distribution, fuses, e-stop (`05-power.md`).

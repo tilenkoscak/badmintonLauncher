@@ -1,8 +1,9 @@
 # Reference: Arduino Uno prototype code
 
 Everything Tilen wrote for the Uno-based prototype, kept verbatim. It is the source of truth
-for servo angles, stepper speeds, the feed sequence and the pin habits that are known to work
-on the real mechanism. Nothing here is compiled or shipped with the ESP32 firmware; the port
+for stepper speeds, homing, the wheel test and the pin habits that are known to work on the
+real mechanism. The feeder has since been redesigned, so its servo angles and sequence here
+are history (see the note in the feeder section). Nothing here is compiled or shipped with the ESP32 firmware; the port
 lives in `../firmware/`. This file summarises what the code says so nobody has to re-read it.
 
 Two code bases exist. Both were written to test parts **individually**; there was never an
@@ -17,7 +18,7 @@ integrated "whole robot" program, which is what `../firmware/` will be.
 
 | Question | Look at |
 |---|---|
-| Feed sequence, servo angles, delays | `ShuttlecockLauncher/src/main.cpp` → `reload()` and the `open…/close…Servo()` helpers. Same code in `sketches/badmintonFeederRealoadSequence/` |
+| Feed sequence, servo angles, delays (old feeder mechanism) | `ShuttlecockLauncher/src/main.cpp` → `reload()` and the `open…/close…Servo()` helpers. Same code in `sketches/badmintonFeederRealoadSequence/` |
 | Feeder homing against the optical endstop | `main.cpp` → `setFeedingZero()` |
 | Pan/tilt speeds and the manual limit teach-in | `main.cpp` → `setupSteppers()`, `limitSetup()`, `moveToLimits()` |
 | Launch-wheel PWM test (kick start + ramp) | `sketches/launcher_motors_control/launcher_motors_control.ino` |
@@ -42,6 +43,12 @@ integrated "whole robot" program, which is what `../firmware/` will be.
 ## Facts the code establishes
 
 ### Feeder (servos + stepper + optical endstop)
+
+> **Superseded mechanism.** The feeder was redesigned in 2026-10: a carriage on the stepper,
+> a lift servo on a gear rack and geared arms (see `../README.md`, "Feeder state machine").
+> The servo angles, the 2.5-turn stroke and the reload order below describe the old design
+> and are kept as history. Still valid: the homing routine against the optical endstop, its
+> speeds, and the reasoning behind the two safety habits.
 
 Servo positions and settle delays, in Uno `Servo` degrees (pulse range 544–2400 µs):
 
@@ -110,9 +117,9 @@ from 3.3 V or its output divided (`../../wiring/06-optical-endstop.md`).
 
 ## Porting notes for the ESP32 firmware
 
-- **Servo pulse range:** the Uno `Servo` library maps 0–180° onto 544–2400 µs. Use
-  `attach(pin, 544, 2400)` in ESP32Servo so 10°, 40°, 105° and 180° land on the same physical
-  positions. With 500–2500 µs the positions shift by a few degrees.
+- **Servo pulse range:** the Uno `Servo` library maps 0–180° onto 544–2400 µs; the ESP32
+  firmware uses the Miuzei's own 500–2500 µs. That only matters when reusing an Uno-era
+  angle, which the redesigned feeder does not: its angles are found on the ESP32.
 - **AccelStepper ports 1:1** (the library supports ESP32) and the ESP32 easily delivers the
   step rates the Uno could not. FastAccelStepper only if hardware-timed pulses are needed later.
 - **Microstepping:** hard-wire M0–M2 with jumpers per `../../wiring/pin-map.md` instead of
@@ -120,7 +127,9 @@ from 3.3 V or its output divided (`../../wiring/06-optical-endstop.md`).
 - **Feeder speed:** start at ~150 RPM (what actually ran), tune up.
 - **Pan/tilt limits:** offer the same teach-in from the web app and persist the limits in
   flash. Endstops for pan and tilt become optional.
-- **Keep the two safety habits** (feeder back first, closed position on attach) and the
-  limiter check as the feeder interlock.
+- **The two safety habits carry over in spirit:** never move the carriage where a servo can
+  collide, and command a known servo position the instant a servo is attached. The concrete
+  order for the redesigned feeder is in `../README.md`. The limiter check stays as the
+  feeder's overtravel guard.
 - **Wheels:** the kick start is worth keeping as an option, but on a 12 V rail a plain ramp is
   likely enough. PWM frequency moves from 980 Hz to ~16 kHz.

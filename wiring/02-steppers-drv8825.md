@@ -73,7 +73,8 @@ Speeds: feeder commanded 500 RPM (the Uno actually managed about 150), pan and t
 with 50 RPM/s acceleration.
 
 Proposal for the ESP32 build: **1/16 for pan and tilt** (smooth, quiet aiming), **1/8 for the
-feeder** (keeps the prototype's 4000 microsteps per 2.5-turn stroke). Jumper M0–M2 to 3V3
+feeder** (as on the prototype; the carriage positions are taught in microsteps, so this must not
+change after teaching). Jumper M0–M2 to 3V3
 per driver as in `pin-map.md` instead of driving them from a GPIO. Higher microstepping
 means more pulses per second; at 1/16 and 2 rev/s that is 6 400 pulses/s, trivial for
 the ESP32, and 150 RPM at 1/8 on the feeder is 4 000 pulses/s.
@@ -132,6 +133,8 @@ Artillery motors come with a JST-XH plug; the two coil pairs are found with a mu
 (a coil reads a few ohms, wires of different coils read open).
 
 ```cpp
+#include <Arduino.h>
+
 // Spins the pan stepper at 1000 steps/s, reversing every 2 s. Pins from pin-map.md.
 const int STEP_PIN = 4, DIR_PIN = 5, EN_PIN = 17;
 
