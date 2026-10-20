@@ -89,7 +89,7 @@ that integration (one controller + one UI) is the goal of this repo.
 - [x] Board verified from a photo; Vref, motor label, gear ratios and servo angles recorded
 - [x] Pin map v0.5 final; all wiring diagrams on one page (`wiring/wiring-diagrams.html`)
 - [x] Web app v1 scope: Android + Brave, complete manual control, pan/tilt START/END, no drills
-- [ ] Resolve the remaining `OPEN:` questions (servo pulse range, pan/tilt reference, endstop, PSU, MOSFET module)
+- [ ] Resolve the remaining `OPEN:` questions (endstop 3.3 V test, PSU label, MOSFET module check)
 - [ ] ESP32 firmware skeleton: Wi-Fi AP, web server, WebSocket, motor drivers
 - [ ] Web app v1: manual control of every axis and every feeder step, wheel speed, feed one, e-stop, pan/tilt START/END, feeder setup
 - [ ] After v1: timed auto-feed, drills (random/programmed pan & tilt patterns)

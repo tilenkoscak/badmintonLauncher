@@ -155,9 +155,9 @@ The feed cycle and the park routine are specified in `controller/README.md` ("Fe
 machine"). The Uno-era angles (arms 10°/40°, spoon 180°/105°/0°) belong to the old mechanism.
 
 Tilen's understanding is that these servos use **0-160°**, so the firmware clamps every servo
-command to that range (`SERVO_MAX_DEG = 160`). The angles are in the scale of the Uno `Servo`
-library (0-180° = 544-2400 µs), and the firmware uses the same pulse range so they carry over
-unchanged (`wiring/03-servos.md`). Settle times were not measured: the firmware starts with
+command to that range (`SERVO_MAX_DEG = 160`). The angles were found on the Uno, in the scale
+of its `Servo` library (0-180° = 544-2400 µs), and the firmware uses the same pulse range so
+they carry over unchanged (`wiring/03-servos.md`). Settle times were not measured: the firmware starts with
 300 ms for the arms and 800 ms for the lift, both adjustable in the app.
 
 ## 5. 775 brushed DC motors, 12 V, 150 W (×2, launch wheels)
@@ -207,11 +207,18 @@ Salvaged from the printer. Mains input, two DC outputs:
 Because the supply is a mains unit, the robot is treated as **mains-powered**; the battery
 option from the first draft is dropped.
 
-> ❓ **OPEN:** Before I finish `wiring/05-power.md` I need: the model printed on the PSU label,
-> and one multimeter test: is there continuity between the negative terminal of output 1 and
-> the negative terminal of output 2? (Decides whether the two grounds are already joined
-> inside the PSU or must be joined at our star point.) Also whether the PSU has a mains switch
-> and whether it came with its fan.
+> ❓ **OPEN:** Before I finish `wiring/05-power.md` I need:
+> 1. A photo of the PSU label (model number and ratings), so I can look up its datasheet.
+> 2. Whether it has a mains switch, and whether it came with a fan.
+> 3. Optional, one continuity test: are the negatives of the two outputs joined inside the
+>    PSU? It does not change our wiring (everything meets at the star point anyway); it tells
+>    whether there is a second, hidden ground path, useful if noise problems ever show up.
+>    How: mains plug **out** for a few minutes. Take the wires off the two **−** output screws
+>    (the prototype probably joins them already through the Uno's GND, which would fake a
+>    result). Multimeter on Ω or continuity, one probe on the − of output 1 (24 V), the other
+>    on the − of output 2 (36 V). Report "beeps / about 0 Ω" or "no beep / OL". A reading that
+>    starts low and keeps climbing is the output capacitors charging and counts as "no beep".
+>    Keep the probes away from the L and N mains screws on the same terminal strip.
 
 ## 7. Buck converter for the wheel rail: 12 V / 30 A ordered
 
@@ -277,8 +284,14 @@ One module per wheel. Details in `wiring/04-launch-wheels-dc-motors.md`.
 The Uno test drove the module at 980 Hz (`analogWrite` on pin 5), so the module is proven at
 that frequency; the ESP32 will use ≈ 16 kHz, inside the module's 0–20 kHz rating.
 
-> ❓ **OPEN:** One quick check on one module: continuity between DC+ and OUT+ (confirms
-> low-side switching, which is why OUT− must never be tied to ground).
+> ❓ **OPEN:** One quick check on one module, to confirm it switches the low side as the docs
+> and diagrams assume. Wheel power off; the module may stay wired. Multimeter on Ω (or
+> continuity), probes on the **DC+** and **OUT+** screw terminals. Report the reading:
+> about 0 Ω (beep) means OUT+ is a plain copper connection to DC+ and the MOSFETs switch OUT−,
+> which is why OUT− and the motor terminals must never be tied to ground. A high reading
+> means the module is built differently and I recheck `wiring/04-launch-wheels-dc-motors.md`.
+> (Do not bother measuring DC− to OUT−: the MOSFETs' built-in diode makes that reading
+> confusing.)
 
 ## 10. Electrolytic capacitor 1000 µF / 50 V (×2)
 
@@ -328,14 +341,18 @@ trigger during operation stops everything. It was read as a plain input without 
 is **LOW when triggered**. Pan and tilt had no endstops; their limits were taught with
 buttons. Details in `wiring/06-optical-endstop.md`.
 
+Position (Tilen, 2026-10-20): at the **front** of the carriage travel, towards the wheels. It
+marks the furthest the feeding mechanism may move: the shuttle still reaches the flywheels
+and the mechanism does not jam into them. The carriage therefore homes towards the wheels.
+
 Level-shifting matters here: on the Uno the board ran from 5 V, so its SIGNAL swung to 5 V,
 which must not reach an ESP32 pin. Plan A is to power it from 3V3 (most of these boards
-work), plan B is a resistor divider on SIGNAL.
+work), plan B is a resistor divider on SIGNAL. The operating voltage is not published
+anywhere a web search could find (2026-10-20).
 
-> ❓ **OPEN:** Before I finalize the endstop page I need a photo of the board (or its pin
-> labels and any part numbers), the result of the 3.3 V test in `wiring/06-optical-endstop.md`,
-> a yes that the "feeding limiter" of the Uno code is this optical board, and where it sits on
-> the redesigned carriage's travel (behind PARK or in front of WHEELS).
+> ❓ **OPEN:** Before I finalize the endstop page I need the result of the quick 3.3 V test in
+> `wiring/06-optical-endstop.md`: the SIGNAL voltage with the slot open and with a card in it,
+> with the board powered from the Uno's 3.3V pin.
 
 ## 14. Arduino Uno (prototype controller)
 
@@ -352,7 +369,7 @@ pins 10 and 11 were suspected faulty as inputs, which is irrelevant for the ESP3
 | Part | Why |
 |---|---|
 | 5–6 V buck converter, ≥ 3 A, fed from the 24 V rail | Servo supply; the N7805 (1 A) moves to the ESP32. See #12 |
-| Home sensors for pan and tilt (optional) | Only if option (c) of the pan/tilt reference question in `controller/README.md` is chosen. Otherwise the app teaches START and END |
+| A clear START mark per axis on the frame (pointer + line) | After every power-up pan and tilt are jogged to these marks and confirmed in the app (`controller/README.md`). Home sensors are not planned |
 | Physical E-stop or switch in the wheel rail | Cuts the wheels without killing the ESP32 |
 | Fuses: 15 A per wheel branch (12 V rail), optional 4 A for the stepper branch | Wiring protection |
 | 470–1000 µF capacitor on the servo rail | Absorbs servo start/stall spikes |
@@ -365,8 +382,6 @@ pins 10 and 11 were suspected faulty as inputs, which is irrelevant for the ESP3
 
 Short version of every `❓ OPEN:` still in the repo, to answer in one go:
 
-1. Servos: were the four angles (arms 145°/154°, lift 160°/0°) found with the Uno `Servo` library (`wiring/03-servos.md`)?
-2. Pan/tilt reference after a power-up: re-teach every time, jog to a START mark and confirm (recommended), or home sensors (`controller/README.md`).
-3. Optical endstop: photo/pin labels; 3.3 V test; confirm it is the "feeding limiter" of the Uno code; where it sits on the carriage travel and roughly how far PARK, TUBE and WHEELS are from it.
-4. PSU: model label; continuity between the two outputs' negatives; mains switch; fan.
-5. MOSFET module: DC+ ↔ OUT+ continuity.
+1. Optical endstop: SIGNAL voltage with the slot open and blocked, powered from the Uno's 3.3V pin (#13, `wiring/06-optical-endstop.md`).
+2. PSU: photo of the label; mains switch; fan; optionally whether the two outputs' negatives are joined inside (#6, with step-by-step instructions).
+3. MOSFET module: resistance between DC+ and OUT+ on one module, power off (#9).

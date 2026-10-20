@@ -349,7 +349,7 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
       <tr><td class="g">13</td><td>J1-19</td><td><code>WHEEL_R_PWM</code></td><td>out, 16 kHz</td><td>PWM pin of MOSFET module R</td><td><b>10 kΩ pull-down to GND</b></td><td>same duty as L, started a moment after L</td></tr>
       <tr><td class="g">1</td><td>J3-4</td><td><code>FEED_HOME</code></td><td>in</td><td>optical endstop SIGNAL</td><td>none, the board drives the line</td><td>LOW = carriage at home; endstop powered from 3V3</td></tr>
       <tr><td class="g">48</td><td>J3-16</td><td><code>RGB_LED</code></td><td>out</td><td>onboard RGB LED</td><td>-</td><td>status light; GPIO 38 on some boards, smoke test 1 tells</td></tr>
-      <tr><td class="g">2</td><td>J3-5</td><td><code>LIMIT_PAN</code></td><td>in</td><td><i>reserved:</i> pan home sensor</td><td><code>INPUT_PULLUP</code></td><td>only if home sensors are added</td></tr>
+      <tr><td class="g">2</td><td>J3-5</td><td><code>LIMIT_PAN</code></td><td>in</td><td><i>reserved:</i> pan home sensor</td><td><code>INPUT_PULLUP</code></td><td>not planned: START is confirmed at a frame mark</td></tr>
       <tr><td class="g">42</td><td>J3-6</td><td><code>LIMIT_TILT</code></td><td>in</td><td><i>reserved:</i> tilt home sensor</td><td><code>INPUT_PULLUP</code></td><td></td></tr>
       <tr><td class="g">41</td><td>J3-7</td><td><code>ESTOP_IN</code></td><td>in</td><td><i>reserved:</i> auxiliary contact of the wheel E-STOP</td><td><code>INPUT_PULLUP</code></td><td>lets the app show "wheel power off"</td></tr>
       <tr><td class="g">40</td><td>J3-8</td><td><code>SHUTTLE_SENSE</code></td><td>in</td><td><i>reserved:</i> empty-tube sensor</td><td><code>INPUT_PULLUP</code></td><td>future</td></tr>
@@ -749,7 +749,10 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
   </svg>
   <figcaption>Smoke test: serial monitor shows 1 with the slot open and 0 with a card in the slot. If it never changes on 3.3 V, use plan B.</figcaption>
   </figure>
-  <div class="callout warn"><b>Still open:</b> where the endstop sits on the carriage travel (behind PARK or in front of WHEELS). That sets the homing direction. Homing only runs with the wheels off.</div>
+  <div class="grid2">
+    <div class="callout info"><b>Position:</b> at the front of the carriage travel, towards the wheels. It marks the furthest the feeder may go: the shuttle reaches the flywheels and the mechanism does not run into them. Homing therefore moves towards the wheels and only runs with the wheels off. WHEELS sits at the release point or just behind it.</div>
+    <div class="callout warn"><b>Still open:</b> does it work on 3.3 V? Power it from the Uno's 3.3V pin and measure SIGNAL with a multimeter, slot open and blocked. Steps in <a href="06-optical-endstop.md">06-optical-endstop.md</a>.</div>
+  </div>
 </section>
 
 <!-- 8 POWER -->
@@ -867,11 +870,9 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
   <h2><span class="n">10</span>Still open</h2>
   <p class="lead">Questions that still affect wiring or firmware. The full list is at the end of <a href="../PARTS.md">PARTS.md</a>.</p>
   <ul>
-    <li>Were the servo angles found with the Uno <code>Servo</code> library? (The pulse range depends on it.)</li>
-    <li>Pan/tilt reference after a power-up: re-teach every time, jog to a START mark and confirm (recommended), or home sensors on GPIO 2 and 42.</li>
-    <li>Optical endstop: 3.3 V test, and where it sits on the carriage travel.</li>
-    <li>PSU: model label, whether the two output negatives are already connected inside.</li>
-    <li>MOSFET module: continuity between DC+ and OUT+.</li>
+    <li>Optical endstop: does SIGNAL swing between about 3.3 V and 0 V when powered from 3.3 V?</li>
+    <li>PSU: photo of the label, mains switch, fan; optionally whether the two output negatives are joined inside.</li>
+    <li>MOSFET module: resistance between DC+ and OUT+ (expected about 0 Ω).</li>
   </ul>
 </section>
 

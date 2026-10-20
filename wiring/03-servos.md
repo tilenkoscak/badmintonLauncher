@@ -20,11 +20,8 @@ flash. The settle times were not measured. 300 ms for the 9° arms move is what 
 needed to close; 800 ms for the lift is the servo's 0.13 s/60° over 160°, doubled for load,
 plus margin. Both are adjustable in the app. Tilen's understanding is that these servos use
 **0-160°**, so the firmware clamps every command to that range (`SERVO_MAX_DEG = 160`).
-
-> ❓ **OPEN:** Before the first servo test on the ESP32 I need a yes that these four angles were
-> found with the Uno and its `Servo` library (for example `servo_test.cpp`). If they came from
-> somewhere else (a servo tester, another library), tell me which, because the pulse range
-> below must match the tool that found them.
+Tilen found the four angles on the Uno with its `Servo` library (confirmed 2026-10-20), so
+they are in the 544-2400 µs scale below.
 
 ## What changes compared with the Uno
 

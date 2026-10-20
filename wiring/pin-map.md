@@ -32,7 +32,7 @@ reservations for inputs that do not exist yet.
 | 13 | J1-19 | `WHEEL_R_PWM` | out (PWM) | PWM pin of MOSFET module R | **10 kΩ pull-down to GND** | same duty as L, started a moment after L |
 | 14 | J1-20 | *(spare)* | - | - | - | the MOSFET modules have no enable pin. Reserved for a future relay on the aim & feed rail |
 | 1 | J3-4 | `FEED_HOME` | in | optical endstop SIGNAL, homes the feeder carriage | none: the board drives the line | `FEED_HOME_ACTIVE_LEVEL = LOW`. Board powered from 3V3, see `06-optical-endstop.md` |
-| 2 | J3-5 | `LIMIT_PAN` | in | pan home sensor, **only if one is added later** | internal `INPUT_PULLUP` | option (c) of the pan/tilt reference question in `controller/README.md` |
+| 2 | J3-5 | `LIMIT_PAN` | in | pan home sensor, **only if one is added later** | internal `INPUT_PULLUP` | not planned: pan/tilt START is confirmed at a frame mark after power-up (`controller/README.md`) |
 | 42 | J3-6 | `LIMIT_TILT` | in | tilt home sensor, only if added later | internal `INPUT_PULLUP` | |
 | 41 | J3-7 | `ESTOP_IN` | in | auxiliary contact on the wheel-rail E-STOP (optional) | internal `INPUT_PULLUP` | lets the app show "wheel power off" |
 | 40 | J3-8 | `SHUTTLE_SENSE` | in | empty-tube sensor (optional, future) | internal `INPUT_PULLUP` | |
@@ -82,7 +82,7 @@ re-teaching that axis.
 | `WHEEL_MAX_DUTY` | Duty cap for GPIO 12/13, derived: min(100 %, 12 V / `WHEEL_RAIL_V`) | `04-launch-wheels-dc-motors.md` |
 | `WHEEL_PWM_HZ` | LEDC frequency for the MOSFET modules, ≈ 16 kHz, ≤ 20 kHz (Uno used 980 Hz) | module spec |
 | `FEED_HOME_ACTIVE_LEVEL` | Level on GPIO 1 that means "carriage at home": LOW on the prototype | `06-optical-endstop.md` |
-| `FEED_HOME_DIR` | Direction of the homing move; depends on where the endstop sits | `06-optical-endstop.md` (open) |
+| `FEED_HOME_DIR` | Direction of the homing move: towards the wheels (the endstop sits at the front of the carriage travel) | `06-optical-endstop.md` |
 | `SERVO_MIN_US`, `SERVO_MAX_US` | Pulse range for 0-180°: 544 and 2400 µs, the Uno `Servo` library's range, so Tilen's angles carry over | `03-servos.md` |
 | `SERVO_MAX_DEG` | 160: every servo command is clamped to 0-160° | `03-servos.md` |
 | Arms OPEN/CLOSED, lift BOTTOM/TOP, settle times | Defaults in `config.h`: 145°/154°, 160°/0°, 300 ms arms, 800 ms lift. The values in use are adjusted in the app and stored in flash | `03-servos.md` |

@@ -14,10 +14,10 @@ files stay the source of truth; the page follows them.
 | `wiring-diagrams.html` | All wiring diagrams on one styled page, self-contained, works offline | v0.5, matches `pin-map.md` v0.5 |
 | `01-esp32-s3-basics.md` | The ESP32-S3 board itself: which pins may be used, power, PlatformIO setup | Board verified from a photo |
 | `02-steppers-drv8825.md` | Pan, tilt and feeder steppers (Sidewinder X3 Plus motors) through DRV8825 on 24 V | Vref, motor label and gear ratios known |
-| `03-servos.md` | The two Miuzei 15 kg feeder servos (arms and lift) and an angle-check sketch | Angles known; pulse-range confirmation pending |
+| `03-servos.md` | The two Miuzei 15 kg feeder servos (arms and lift) and an angle-check sketch | Angles known (found on the Uno) |
 | `04-launch-wheels-dc-motors.md` | The two 775 motors: buck, MOSFET module with buffer and TVS, flyback diode | Draft. 12 V buck ordered |
 | `05-power.md` | The Artillery dual-output PSU, rails, grounding, switching | Draft. PSU label pending |
-| `06-optical-endstop.md` | The salvaged optical endstop: the feeder's home sensor, its logic, 3.3 V | Draft. Board photo, 3.3 V test and position pending |
+| `06-optical-endstop.md` | The salvaged optical endstop: the feeder's home sensor, its logic, 3.3 V | Position known; 3.3 V test pending |
 | `pin-map.md` | One table with every GPIO in use | v0.5, pins final |
 
 Open questions are marked `❓ **OPEN:**` inside each file (convention in `CLAUDE.md`) and

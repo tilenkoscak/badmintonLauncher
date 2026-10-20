@@ -52,7 +52,8 @@ controller/
 | Wheel speed | One speed for both wheels (Tilen, 2026-10-20). Two PWM lines remain, so the second wheel starts a moment after the first | Spin shots are not wanted |
 | Wheel rail and duty cap | 12 V rail (buck ordered). `WHEEL_MAX_DUTY = min(100 %, 12 V / WHEEL_RAIL_V)` with `WHEEL_RAIL_V = 24` until the new buck is fitted and measured. UI "100 %" maps to the cap | The 775 motors are 12 V (`wiring/04-launch-wheels-dc-motors.md`) |
 | Wheel PWM frequency | `WHEEL_PWM_HZ` ≈ 16 kHz (10 kHz if the modules run hot), never above 20 kHz | Limit of the MOSFET modules; high frequency keeps current ripple low |
-| Pan/tilt limits | START and END taught from the app (jog to each end, confirm), stored in flash and enforced as soft limits, as the prototype did with two buttons. How an axis finds its reference after a power-up is still open (below) | `reference-uno/README.md` |
+| Pan/tilt limits | START and END taught once from the app (jog to each end, confirm), stored in flash as START plus the span to END, and enforced as soft limits | As the prototype did with two buttons (`reference-uno/README.md`), but remembered |
+| Pan/tilt reference after power-up | No home sensors. At every power-up the user jogs each axis to a **mark on the frame** at its START and taps "this is START"; END follows from the stored span. Until then that axis only jogs slowly and has no soft limits (Tilen, 2026-10-20) | One tap per axis instead of re-teaching both ends. GPIO 2 and 42 stay reserved if home sensors are ever wanted |
 | Feeder | Carriage homed against the optical endstop (`FEED_HOME_ACTIVE_LEVEL = LOW`). Carriage positions PARK, TUBE and WHEELS and the four servo angles are taught from the app and stored in flash | Redesigned mechanism, next section |
 | Empty tube | No sensor in v1. The app counts shots against the number of shuttles the user says are loaded. An IR sensor on GPIO 40 (`SHUTTLE_SENSE`) can come later | With an empty tube the gripper simply closes on nothing, which the firmware cannot see |
 
@@ -63,7 +64,8 @@ moves a **carriage** horizontally between the shuttle tube and the wheels. On th
 the **lift servo** turns a pinion that drives a vertical gear rack. The rack carries the
 **arms servo**, whose two geared arms close around the shuttle's cork. Each servo has two
 fixed positions (arms OPEN 145° / CLOSED 154°, lift BOTTOM 160° / TOP 0°; defaults that the
-app can adjust). The carriage has three taught positions, counted in steps from the endstop:
+app can adjust). The carriage has three taught positions, counted in steps back from home
+(0 = where the optical endstop releases, at the wheel end of the travel):
 
 | Carriage position | Meaning |
 |---|---|
@@ -113,28 +115,18 @@ Servos do not report their position, so each servo move waits a fixed settle tim
 (defaults 300 ms for the arms and 800 ms for the lift, adjustable in the feeder setup; the old
 mechanism needed 300-750 ms per move).
 
-Homing direction depends on where the endstop sits. On the Uno-era feeder it was at the
-front end of the stroke, towards the wheels. Homing therefore only runs with the wheels off,
-wherever the endstop is.
+**Where the endstop sits (Tilen, 2026-10-20):** at the **front** of the carriage travel,
+towards the wheels, as on the Uno-era feeder. It marks the furthest the carriage may go: the
+shuttle still reaches the flywheels, and the mechanism does not run into them. So:
 
-> ❓ **OPEN:** Before I can write the homing routine I need to know at which end of the
-> carriage travel the optical endstop sits now (behind PARK, or in front of WHEELS) and
-> roughly how far PARK, TUBE and WHEELS are from it. Millimetres or stepper revolutions are
-> both fine; the exact values get taught in the app.
-
-## Decisions still open
-
-> ❓ **OPEN:** Pan and tilt have no endstops, so after a power-up the firmware does not know
-> where the axes stand, and START/END stored in flash are only valid once that reference is
-> back. Before I write the limit code I need Tilen's choice:
-> (a) re-teach START and END at every power-up, as the prototype did;
-> (b) **recommended:** teach START and END once; at each power-up jog each axis to a mark on
-> the frame at its START and tap "this is START", and END follows from the stored span;
-> (c) add a home sensor per axis (GPIO 2 and 42 are reserved) and home automatically, like the
-> feeder carriage.
-> Until an axis has its reference, the firmware only allows slow jogging on it. I read
-> "start/end positions" as the two ends of each axis' allowed range; if it meant something
-> else (for example the two ends of a sweep), tell me.
+- Homing (`FEED_HOME_DIR`) moves the carriage **towards the wheels**, slowly, and only runs
+  with the wheels off. Trigger, back off until the endstop releases, call that position 0.
+- WHEELS is at 0 or a few steps behind it, as on the Uno, whose feed stroke ended exactly at
+  the release point. TUBE and PARK lie further back. The app teaches all three; the setup
+  screen refuses a WHEELS value past 0.
+- No move ever targets a position past 0 towards the wheels. An endstop trigger outside
+  homing means the carriage got further forward than it should (lost steps, something
+  slipped), and the feeder stops.
 
 ## Safety requirements (not negotiable, designed in from the first commit)
 
@@ -158,8 +150,8 @@ wherever the endstop is.
 - **Feeder interlocks:** the carriage only moves to WHEELS when the wheels are at the
   requested speed (a shuttle pushed into stopped wheels jams the machine); homing only runs
   with the wheels off; an unexpected endstop trigger outside homing stops the feeder.
-- **Soft limits** on pan and tilt once their limits are taught, and on the carriage once it is
-  homed. Before that, only slow jog moves.
+- **Soft limits** on pan and tilt once START and END are taught and START has been confirmed
+  since power-up, and on the carriage once it is homed. Before that, only slow jog moves.
 - **Hardware watchdog** enabled so a firmware hang resets the ESP32 into the safe state.
 - Physical e-stop on the wheel rail as the last line (`wiring/05-power.md`).
 
@@ -175,7 +167,8 @@ pan and tilt. No drills, no auto-feed. Target: Android phone, Brave browser.
 - Aim: pan and tilt jog (tap = small step, hold = continuous, selectable speed), go to a typed
   position, readout in degrees (from the gear ratio; approximate for pan) and in steps.
   Per axis: "set START" and "set END" (jog there, confirm), go to START / END / centre.
-  Stored in flash and enforced as soft limits.
+  Stored in flash and enforced as soft limits. After every power-up: jog each axis to its
+  START mark and tap "this is START"; the app shows which axes still need it.
 - Feeder, manual: every step on its own button (home carriage, carriage to PARK / TUBE /
   WHEELS, carriage jog, arms OPEN / CLOSED, lift BOTTOM / TOP), plus "Feed one" for the full
   cycle and "Park". The interlocks of the state machine apply to every button.
