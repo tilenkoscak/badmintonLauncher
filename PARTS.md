@@ -14,11 +14,11 @@ the three steppers, the dual-output power supply and the optical endstop.
 
 | # | Part | Qty | Used for | What we know |
 |---|---|---|---|---|
-| 1 | ESP32-S3 dev board, N16R8, 44 pins, USB-C | 1 | Main controller: Wi-Fi access point, web server, all motion | Module variant known; board details to verify |
-| 2 | DRV8825 stepper driver carrier, 100 µF/50 V capacitor already fitted | 3 | Pan, tilt and feeder steppers | Known part; sense-resistor marking to verify |
-| 3 | NEMA 17 stepper from the Sidewinder X3 Plus (2 × Z-axis type "42-35", 1 × from another axis) | 3 | Pan, tilt, feeder | Size known; rated current estimated 1.2–1.7 A, label to read |
-| 4 | Miuzei 15 kg digital servo, metal gear, 180° | 2 | Feeder: arms servo (gripper) and lift servo (rack and pinion), both on the carriage | 4.8–7.4 V, powered at 5 V; angles of the redesigned mechanism to find |
-| 5 | 775 brushed DC motor, 12 V, 150 W, 10 000 rpm | 2 | Launch wheels | Known from listing. Moving to a 12 V rail, see #7 |
+| 1 | ESP32-S3 dev board (DevKitC-1 clone) with ESP32-S3-WROOM-1-N16R8, 44 pins, two USB-C | 1 | Main controller: Wi-Fi access point, web server, all motion | Verified from a photo (2026-10-20): DevKitC-1 v1.1 header, PCB antenna |
+| 2 | DRV8825 stepper driver carrier, 100 µF/50 V capacitor already fitted | 3 | Pan, tilt and feeder steppers | Vref 0.6 V on all three, works on the prototype. Sense-resistor marking not read |
+| 3 | NEMA 17 stepper from the Sidewinder X3 Plus, label "42SHDC1067Z-15WD" | 3 | Pan (≈ 1:36.57 planetary), tilt (1:72), feeder carriage | Rated current not published; runs at Vref 0.6 V |
+| 4 | Miuzei 15 kg digital servo, metal gear, 180° | 2 | Feeder: arms servo (gripper) and lift servo (rack and pinion), both on the carriage | 4.8-7.4 V, powered at 5 V. Angles: arms 145°/154°, lift 160°/0° |
+| 5 | 775 brushed DC motor, 12 V, 150 W, 10 000 rpm | 2 | Launch wheels, both always at the same speed | Known from listing. Moving to a 12 V rail, see #7 |
 | 6 | Artillery X3 Plus power supply, two outputs: 24 V / 4.2 A and 36 V / 9.7 A | 1 | Everything | Ratings known; model label and output isolation to verify |
 | 7 | Buck converter for the wheel rail: 36/48 V → 12 V, 30 A, IP68 potted module | 1 | Wheel rail | **Ordered.** Replaces the 36 → 24 V module, which stays in until it arrives |
 | 8 | Fuji Electric E83-004 Schottky diode, 40 V, 60 A, TO-3P | 2 | Flyback diode across each wheel motor (MOSFET module output) | Known, correctly placed |
@@ -50,19 +50,21 @@ This is a clone of the Espressif **ESP32-S3-DevKitC-1** carrying an
 | Header | 2 × 22 pins, usually labelled with GPIO numbers on the silkscreen |
 | Onboard | RST + BOOT buttons, addressable RGB LED (GPIO 48 on most clones, GPIO 38 on some), 3.3 V LDO regulator |
 | USB | Type-C. DevKitC-1 style boards have **two** USB-C ports: "COM"/"UART" (through a USB-serial chip) and "USB" (native USB on GPIO 19/20) |
-| Power in | USB-C 5 V, or the `5V` header pin, or regulated 3.3 V into `3V3` (not recommended) |
+| Power in | USB-C 5 V, or the `5Vin` header pin, or regulated 3.3 V into `3V3` (not recommended) |
 
 Role in this project: runs as a Wi-Fi access point, serves the web app to the phone,
 receives commands over WebSocket, generates STEP/DIR for three DRV8825s, PWM for two servos
 and PWM for two launch-wheel MOSFET modules. Details in `wiring/01-esp32-s3-basics.md`.
 
-> ❓ **OPEN:** Before I finalize the board section of the wiring docs I need a photo of the
-> top side of the board (or the pin labels read out) so I can confirm: (a) the header order
-> matches the official DevKitC-1 v1.1 layout that `wiring/pin-map.md` assumes, (b) whether the
-> board has one or two USB-C ports and how they are labelled, (c) which USB-serial chip it has
-> (CH343 / CH340 / CP2102, matters for the Windows driver), (d) whether the RGB LED is on
-> GPIO 48 or 38, (e) whether the module has a PCB antenna (WROOM-1) or a u.FL connector for
-> an external antenna (WROOM-1U).
+Checked on Tilen's board (photo of the top side, 2026-10-20):
+
+| Check | Result |
+|---|---|
+| Module | **ESP32-S3-WROOM-1, N16R8** printed on the can. PCB antenna (WROOM-1, not the u.FL WROOM-1U); the antenna end overhangs the board edge |
+| Header | 2 × 22 pins, silkscreen identical to the DevKitC-1 v1.1 layout drawn in `wiring/01-esp32-s3-basics.md`. The 5 V pin is labelled `5Vin`, the reset button `RET` |
+| USB | Two USB-C ports at the end opposite the antenna, not labelled on the top side. The USB-serial chip sits next to the port on the J3 side, so that one is most likely COM and the other native USB. How to tell them apart for sure: `wiring/01-esp32-s3-basics.md` |
+| USB-serial chip | Small QFN package, marking not legible in the photo. These clones normally carry a CH343P |
+| RGB LED | Fitted, beside J1 near GPIO 10/11. Whether it is wired to GPIO 48 or 38 cannot be seen from the top; smoke test 1 settles it |
 
 ## 2. DRV8825 stepper motor driver carrier (×3)
 
@@ -83,10 +85,12 @@ One driver each for pan, tilt and feeder. Details in `wiring/02-steppers-drv8825
 The current limits tuned on the Uno prototype stay valid: they do not depend on the
 microcontroller, only on the motor.
 
-> ❓ **OPEN:** Before I write final Vref values I need the marking on the two small sense
-> resistors next to the chip (`R100` = 0.1 Ω → I = 2·Vref; `R200` = 0.2 Ω → I = 1·Vref),
-> whether heatsinks are fitted, and the Vref / microstep jumper settings currently on each of
-> the three drivers (measure Vref as described in `wiring/02-steppers-drv8825.md`).
+Measured by Tilen (2026-10-20): **Vref = 0.6 V on all three drivers**, the setting the
+prototype runs with. The sense-resistor marking was not read. With `R100` (0.1 Ω), which
+almost every DRV8825 carrier uses, 0.6 V is a limit of **1.2 A per phase**; with `R200` it
+would be 0.6 A. The motors work at this setting, so it stays. The microstep pins get jumpers
+on the ESP32 build (1/8 on all three, `wiring/pin-map.md`), so how the Uno wired them no
+longer matters.
 
 ## 3. Stepper motors (×3: pan, tilt, feeder)
 
@@ -96,25 +100,30 @@ believed to be the same size and rating.
 
 | Property | Value |
 |---|---|
-| Frame | NEMA 17 (42 mm). Artillery lists the X3/X4 Z-axis motor as type **"42-35"** (42 mm square, 35 mm long). The X-axis motor is a "42-40", the Y-axis a "42-48" |
-| Step angle | 1.8° (200 full steps per revolution) is standard for these printers; confirm on the label |
-| Rated current | **Estimated 1.2–1.7 A per phase** (Tilen). Typical for a 42-35 is 1.3–1.5 A |
+| Frame | NEMA 17 (42 mm). Artillery lists the X3/X4 Z-axis motor as type **"42-35"** (42 mm square, 35 mm long) |
+| Label | **42SHDC1067Z-15WD**, LOT NO. 231009R, Artillery logo. Read from one motor (photo, 2026-10-20); the other two are assumed to be the same type |
+| Step angle | 1.8° (200 full steps per revolution) assumed, standard for these printers; the label does not state it |
+| Rated current | **Not published.** No datasheet was found for 42SHDC1067Z-15WD. The working value is the prototype's Vref 0.6 V (≈ 1.2 A with R100 sense resistors, see #2) |
 | Wiring | Bipolar, 4 wires, Artillery motors come with a JST-XH plug (4-pin, or 6-pin with 4 populated) |
+
+Gearing between motor and axis (Tilen, 2026-10-20), with the step counts at the 1/8
+microstepping of the ESP32 build (1600 microsteps per motor revolution):
+
+| Axis | Gearing | Microsteps per output degree |
+|---|---|---|
+| Pan | 2-stage planetary, **≈ 1:36.57** | 1600 × 36.57 / 360 ≈ **162.5** |
+| Tilt | **1:72** | 1600 × 72 / 360 = **320** |
+| Feeder carriage | positions are taught in steps, no ratio needed | 1600 per motor revolution |
+
+The pan ratio is approximate, so the degrees the app shows for pan are approximate too.
+Positions and limits are stored in microsteps, so this does not affect repeatability.
 
 What the Uno code adds (`controller/reference-uno/README.md`): the feeder driver ran at
 1/8 microstepping with M0 and M1 tied together and driven HIGH, and the old feeder homed
 against the optical endstop (#13). In the redesigned feeder the stepper moves a carriage
 between PARK, the shuttle tube and the wheels (`controller/README.md`).
-Pan and tilt ran at a gentle 50 RPM with a software multiplier of 2, but the code's comments
-and the shared microstep pin disagree about the actual jumpering of those two drivers.
-
-> ❓ **OPEN:** Before I fix the DRV8825 current limits and the steps-per-degree maths I need,
-> for each motor, the text printed on its label (model number and current, e.g. "42HB34F...
-> 1.3A" or "17HS15-1504S") and which motor sits on which axis (pan / tilt / feeder). If the
-> third motor is not a 42-35, its label tells us. I also need the gear or belt ratio between
-> each stepper and its axis, what moves the feeder carriage (lead screw, belt or rack; only
-> needed to show millimetres in the app), and which M0/M1/M2 pins of the pan and tilt drivers
-> were wired to Uno pin 9.
+Pan and tilt ran at a gentle 50 RPM motor speed, which through the gearing is only about
+8°/s of pan and 4°/s of tilt.
 
 ## 4. Hobby servos (×2, feeder)
 
@@ -137,18 +146,19 @@ the "12 V" in the first prototype notes was a slip.
 Roles in the **redesigned feeder** (2026-10). Both servos ride on the carriage that the
 feeder stepper moves between PARK, the shuttle tube and the wheels:
 
-| Servo | GPIO | Mechanism | Fixed positions |
+| Servo | GPIO | Mechanism | Positions (Tilen, 2026-10-20) |
 |---|---|---|---|
-| Arms servo | 10 | Two arms coupled by gears; closing them grabs the shuttle at the cork, at the bottom of the shuttle tube | OPEN, CLOSED |
-| Lift servo (formerly "spoon") | 11 | A pinion on the servo drives a vertical gear rack; the rack carries the arms servo | BOTTOM, TOP |
+| Arms servo | 10 | Two arms coupled by gears; closing them grabs the shuttle at the cork, at the bottom of the shuttle tube | OPEN **145°**, CLOSED **154°** |
+| Lift servo (formerly "spoon") | 11 | A pinion on the servo drives a vertical gear rack; the rack carries the arms servo | BOTTOM **160°**, TOP **0°** |
 
 The feed cycle and the park routine are specified in `controller/README.md` ("Feeder state
 machine"). The Uno-era angles (arms 10°/40°, spoon 180°/105°/0°) belong to the old mechanism.
 
-> ❓ **OPEN:** Before I put default angles into the firmware I need the four positions of the
-> redesigned mechanism (arms OPEN and CLOSED, lift BOTTOM and TOP) and the settle time of each
-> move, if known. Otherwise the angle-finder smoke test in `wiring/03-servos.md` gives them in
-> a few minutes.
+Tilen's understanding is that these servos use **0-160°**, so the firmware clamps every servo
+command to that range (`SERVO_MAX_DEG = 160`). The angles are in the scale of the Uno `Servo`
+library (0-180° = 544-2400 µs), and the firmware uses the same pulse range so they carry over
+unchanged (`wiring/03-servos.md`). Settle times were not measured: the firmware starts with
+300 ms for the arms and 800 ms for the lift, both adjustable in the app.
 
 ## 5. 775 brushed DC motors, 12 V, 150 W (×2, launch wheels)
 
@@ -179,10 +189,11 @@ on pin 5 at 980 Hz, a 200 ms kick at duty 255, then duty 100 (39 %) and a ramp t
 back. So a 775 has already run at full duty on the 24 V rail, but there is no record of which
 duty produced a good shot.
 
-> ❓ **OPEN:** Before I can judge whether the 12 V rail loses any launch range I need the duty
-> (0–255, on the 24 V rail) that gave a good shot in manual tests, if that was ever tried.
-> Above 128 is out of reach on 12 V. I also need to know whether the two wheels must
-> be adjustable independently (spin shots) or always run at the same speed.
+Tilen (2026-10-20): the duty that gives a good shot is **not known yet**. It will be found by
+testing with the web app's manual wheel control, on the 12 V rail once it is fitted. If full
+duty on 12 V turns out too slow, the rail question reopens. **Both wheels always run at the
+same speed**, so the app has one speed setting. They keep separate PWM lines so the firmware
+can start the second wheel a moment after the first.
 
 ## 6. Power supply: Artillery Sidewinder X3 Plus PSU (dual output)
 
@@ -341,7 +352,7 @@ pins 10 and 11 were suspected faulty as inputs, which is irrelevant for the ESP3
 | Part | Why |
 |---|---|
 | 5–6 V buck converter, ≥ 3 A, fed from the 24 V rail | Servo supply; the N7805 (1 A) moves to the ESP32. See #12 |
-| Endstops for pan and tilt (optional) | The prototype taught pan/tilt limits with buttons at every start; the app will do the same and remember them. Endstops only if repeatable homing is wanted later |
+| Home sensors for pan and tilt (optional) | Only if option (c) of the pan/tilt reference question in `controller/README.md` is chosen. Otherwise the app teaches START and END |
 | Physical E-stop or switch in the wheel rail | Cuts the wheels without killing the ESP32 |
 | Fuses: 15 A per wheel branch (12 V rail), optional 4 A for the stepper branch | Wiring protection |
 | 470–1000 µF capacitor on the servo rail | Absorbs servo start/stall spikes |
@@ -352,13 +363,10 @@ pins 10 and 11 were suspected faulty as inputs, which is irrelevant for the ESP3
 
 ## Open questions checklist
 
-Short version of every `❓ OPEN:` above, to answer in one go:
+Short version of every `❓ OPEN:` still in the repo, to answer in one go:
 
-1. ESP32 board: photo or pin labels; one or two USB-C ports; RGB LED pin; USB-serial chip; antenna type.
-2. DRV8825: sense-resistor marking, heatsinks, current Vref per driver; which M pins of the pan/tilt drivers were wired to Uno pin 9.
-3. Steppers: label text of each motor, which motor is on which axis, gear/belt ratios of pan and tilt, what moves the feeder carriage (optional).
-4. Servos: the four angles of the redesigned feeder (arms OPEN/CLOSED, lift BOTTOM/TOP) and settle times, or find them with the smoke test in `wiring/03-servos.md`.
-5. 775 wheels: duty that gave a good shot on the 24 V rail, if known; independent wheel speeds or not.
-6. PSU: model label; continuity between the two outputs' negatives; mains switch; fan.
-7. MOSFET module: DC+ ↔ OUT+ continuity.
-8. Optical endstop: photo/pin labels; 3.3 V test; confirm it is the "feeding limiter" of the Uno code; where it sits on the carriage travel.
+1. Servos: were the four angles (arms 145°/154°, lift 160°/0°) found with the Uno `Servo` library (`wiring/03-servos.md`)?
+2. Pan/tilt reference after a power-up: re-teach every time, jog to a START mark and confirm (recommended), or home sensors (`controller/README.md`).
+3. Optical endstop: photo/pin labels; 3.3 V test; confirm it is the "feeding limiter" of the Uno code; where it sits on the carriage travel and roughly how far PARK, TUBE and WHEELS are from it.
+4. PSU: model label; continuity between the two outputs' negatives; mains switch; fan.
+5. MOSFET module: DC+ ↔ OUT+ continuity.

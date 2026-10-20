@@ -15,7 +15,7 @@ outputs: **24 V / 4.2 A** and **36 V / 9.7 A**. The robot is mains-powered.
                   │      ├──► DRV8825 pan   VMOT  (100 µF/50 V on the driver)
                   │      ├──► DRV8825 tilt  VMOT
                   │      ├──► DRV8825 feed  VMOT
-                  │      ├──► MEAN WELL N7805-1CW ──► 5 V / 1 A ──► ESP32 `5V` pin        (recommended use)
+                  │      ├──► MEAN WELL N7805-1CW ──► 5 V / 1 A ──► ESP32 `5Vin` pin      (recommended use)
                   │      └──► 5–6 V buck ≥ 3 A (to add) ──(+1000 µF)──► arms servo, lift servo
                   │
                   └── OUTPUT 2: 36 V / 9.7 A ──► buck 12 V / 30 A (ordered; 24 V one until then) ──► [ E-STOP / WHEEL SWITCH ]

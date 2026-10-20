@@ -19,16 +19,21 @@ for the first time.
 | Cores | 1 | 2. In Arduino the Wi-Fi stack runs on core 0, `setup()`/`loop()` on core 1 |
 | Current per pin | 20–40 mA | ≈ 20 mA safe, 40 mA absolute max |
 | 3.3 V output | 50 mA from the Uno's regulator | Board LDO is typically 500–800 mA **including** the ESP32 itself, which peaks at ~500 mA during Wi-Fi. Do not power anything but small sensors from `3V3` |
-| Serial monitor | one USB port | Two USB-C ports on most of these boards, with different behaviour (see below) |
+| Serial monitor | one USB port | Two USB-C ports on this board, with different behaviour (see below) |
 | Boot | reset button | Strapping pins (0, 3, 45, 46) decide the boot mode; keep them free |
 
-## Board anatomy (typical DevKitC-1 clone)
+## Board anatomy (Tilen's board, verified from a photo)
+
+Held with the components facing you, the antenna up and the USB-C ports down. Pin 1 of each
+row is at the antenna end. `wiring-diagrams.html` has the same view in colour, with every
+pin's assignment.
 
 ```
-                         ┌────── USB-C "COM/UART" ──┐  ┌── USB-C "USB" ──┐
-                         │  via CH343/CP2102 → GPIO43/44 │ native USB → GPIO19/20 │
-                         └───────────────────────────────┴─────────────────────────┘
-   J1 (left)                                                          J3 (right)
+                    ┌─────────────────────────────┐
+                    │  PCB antenna (overhangs the │   keep metal and motor wires away
+                    │  board edge)                │
+                    │  ESP32-S3-WROOM-1  N16R8    │
+   J1 (left)        └─────────────────────────────┘                 J3 (right)
    3V3  ── ●                                                           ● ── GND
    3V3  ── ●                                                           ● ── TX  (GPIO 43)  ✗ serial
    RST  ── ●                                                           ● ── RX  (GPIO 44)  ✗ serial
@@ -49,16 +54,27 @@ for the first time.
    GPIO 12 ── ●                                                        ● ── GPIO 21
    GPIO 13 ── ●                                                        ● ── GPIO 20  ✗ USB D+
    GPIO 14 ── ●                                                        ● ── GPIO 19  ✗ USB D−
-   5V   ── ●                                                           ● ── GND
+   5Vin ── ●                                                           ● ── GND
    GND  ── ●                                                           ● ── GND
-                          [BOOT]                      [RST]           [RGB LED]
+              ┌──────────┐                                ┌──────────┐
+              │  USB-C   │  (J1 side)          (J3 side)  │  USB-C   │  USB-serial chip next to it
+              └──────────┘                                └──────────┘
+   RGB LED beside J1 near GPIO 10/11.  BOOT and RET (= reset) buttons beside J3 near GPIO 35-37.
 ```
 
-This is the official Espressif ESP32-S3-DevKitC-1 v1.1 layout, which the 44-pin AliExpress
-clones normally copy. **Trust the silkscreen on your board over this drawing.**
+This is the official Espressif ESP32-S3-DevKitC-1 v1.1 layout. Tilen's board matches it
+label for label (photo, 2026-10-20); the only differences are the names `5Vin` (official:
+`5V`) and `RET` on the reset button. The module is an ESP32-S3-WROOM-1 N16R8 with a PCB
+antenna.
 
-> ❓ **OPEN:** Before I mark this drawing as verified I need a photo of Tilen's board or the
-> pin labels read out row by row, and confirmation of how the USB-C port(s) are labelled.
+### Which USB-C port is which
+
+The ports are not labelled on the top side. The small USB-serial chip sits next to the port
+on the J3 side, so that one is most likely **COM** (through the chip to UART0, GPIO 43/44) and
+the one on the J1 side the **native USB** port (GPIO 19/20). To be sure, plug in one port at a
+time and look at Windows Device Manager: the native port adds a **USB JTAG/serial debug unit**
+device next to its COM port, the COM port does not. Smoke test 1 confirms it too: its output
+appears only on the COM port. Use COM for uploads and the serial monitor.
 
 ## Pins: forbidden, careful, free
 
@@ -84,16 +100,16 @@ Every GPIO is input/output-capable, can generate PWM and can trigger interrupts.
 | Situation | How |
 |---|---|
 | On the bench, developing | USB-C from the PC. Nothing else needed. Connect **only GND** between the board and the motor supply, plus the signal wires |
-| In the robot | 5 V from a buck converter into the `5V` pin and `GND`. A dedicated small buck (≥ 1 A) for the ESP32 is better than sharing the servo buck: a stalling servo pulls the 5 V rail down and the ESP32 brown-out detector resets the board |
+| In the robot | 5 V from a buck converter into the `5Vin` pin and `GND`. A dedicated small buck (≥ 1 A) for the ESP32 is better than sharing the servo buck: a stalling servo pulls the 5 V rail down and the ESP32 brown-out detector resets the board |
 | Never | Feed 5 V or 12 V into `3V3` or into any GPIO |
 
 Rules of thumb:
 
 - The `3V3` pin is an **output** of the board's regulator. Use it only for DRV8825
   RESET/SLEEP, pull-up resistors and small sensors.
-- `5V` pin and USB at the same time: DevKitC-1 style boards have a diode between USB and the
+- `5Vin` pin and USB at the same time: DevKitC-1 style boards have a diode between USB and the
   `5V` rail so both can be connected, but not every clone has it. Verify with a multimeter
-  (no continuity from `5V` pin back to the USB connector's VBUS) before ever plugging in
+  (no continuity from the `5Vin` pin back to the USB connector's VBUS) before ever plugging in
   the PC while the buck is on. If unsure, unplug the buck while developing over USB.
 - The board has a brown-out detector. Random resets when motors start = the 5 V supply
   to the board is sagging. Fix the power, do not disable the detector.
@@ -105,10 +121,10 @@ All ESP32 code in this project is built with **PlatformIO**, like the Uno projec
 
 1. VS Code or Cursor with the **PlatformIO IDE** extension (already installed for the Uno
    project).
-2. Plug the board into the PC using the USB-C port labelled **COM** / **UART** (the one
-   going through the USB-serial chip). This is the most reliable port for uploads.
-   Windows 11 normally installs the CH343 / CP2102 driver by itself; if no COM port appears,
-   the chip's driver has to be installed manually. PlatformIO finds the port on its own.
+2. Plug the board into the PC using the **COM** port (the one going through the USB-serial
+   chip; see "Which USB-C port is which" above). This is the most reliable port for uploads.
+   Windows 11 normally installs a driver for the chip by itself; if no COM port appears,
+   install WCH's CH343 driver. PlatformIO finds the port on its own.
 3. `platformio.ini` for this board (N16R8: 16 MB QIO flash, 8 MB octal PSRAM):
 
    ```ini

@@ -26,7 +26,7 @@ that integration (one controller + one UI) is the goal of this repo.
 |---|---|
 | `AGENTS.md` | This file: project summary + working conventions |
 | `PARTS.md` | Bill of materials: every electronic part, what is known, what is still unknown |
-| `wiring/` | How to wire each subsystem to the ESP32-S3. Tilen has never used an ESP32 before, so these docs explain the differences from the Uno, not just the connections |
+| `wiring/` | How to wire each subsystem to the ESP32-S3. Tilen has never used an ESP32 before, so these docs explain the differences from the Uno, not just the connections. `wiring/wiring-diagrams.html` shows every diagram on one page in a browser |
 | `controller/` | The controller itself: `firmware/` (ESP32-S3 PlatformIO project), `webapp/` (the phone UI the ESP32 serves) and `reference-uno/` (the Uno prototype code; its README extracts speeds, homing and the old feeder's angles) |
 
 ## Key technical constraints
@@ -51,7 +51,8 @@ that integration (one controller + one UI) is the goal of this repo.
   the park routine are specified in `controller/README.md` ("Feeder state machine"); do not
   reorder steps without checking it.
 - Phone ↔ robot link is **Wi-Fi**: the ESP32 runs as an access point and serves the web app.
-  Bluetooth is not used (iOS browsers cannot reach it; Web Bluetooth is Chrome/Android only).
+  Target: an **Android phone with the Brave browser** (Chromium); iOS is not a target.
+  Bluetooth is not used.
   Consequence: the phone has **no internet** while connected, so the web app must be fully
   self-contained (no CDN scripts, fonts or icons).
 - The launch wheels spin at up to 10 000 rpm and the 775 motors can draw tens of amps.
@@ -70,13 +71,13 @@ that integration (one controller + one UI) is the goal of this repo.
 - Firmware: Arduino framework (arduino-esp32 core 3.x) on the ESP32-S3, built with
   **PlatformIO** in VS Code or Cursor, like Tilen's Uno project. Board configuration is in
   `wiring/01-esp32-s3-basics.md`.
-- `wiring/pin-map.md`, `PARTS.md` and the firmware pin definitions must stay in sync.
-  A pin change is done in all three places in the same commit.
+- `wiring/pin-map.md`, `PARTS.md`, `wiring/wiring-diagrams.html` and the firmware pin
+  definitions must stay in sync. A pin change is done in all four places in the same commit.
 - Prefer small, testable steps: each wiring doc ends with a smoke test that proves that
   one subsystem works on the ESP32 before the next one is connected.
 - Tilen also works from a second computer: fetch before editing, the remote may be ahead.
 
-## Status (2026-10-05)
+## Status (2026-10-20)
 
 - [x] Prototype mechanics and all subsystems working individually on Arduino Uno
 - [x] Repo skeleton, parts list, first draft of wiring docs and pin map
@@ -85,8 +86,10 @@ that integration (one controller + one UI) is the goal of this repo.
 - [x] Wheel rail: 12 V / 30 A buck ordered
 - [x] Toolchain: PlatformIO
 - [x] Redesigned feeder documented: carriage, lift servo, arms servo, cycle and park routine
-- [ ] Resolve the remaining `OPEN:` questions (labels, measurements, servo angles, endstop position)
-- [ ] Final pin map and wiring diagrams
+- [x] Board verified from a photo; Vref, motor label, gear ratios and servo angles recorded
+- [x] Pin map v0.5 final; all wiring diagrams on one page (`wiring/wiring-diagrams.html`)
+- [x] Web app v1 scope: Android + Brave, complete manual control, pan/tilt START/END, no drills
+- [ ] Resolve the remaining `OPEN:` questions (servo pulse range, pan/tilt reference, endstop, PSU, MOSFET module)
 - [ ] ESP32 firmware skeleton: Wi-Fi AP, web server, WebSocket, motor drivers
-- [ ] Web app v1: manual control of every axis, wheel speed, feed button, e-stop, feeder setup
-- [ ] Drills: timed auto-feed, random/programmed pan & tilt patterns
+- [ ] Web app v1: manual control of every axis and every feeder step, wheel speed, feed one, e-stop, pan/tilt START/END, feeder setup
+- [ ] After v1: timed auto-feed, drills (random/programmed pan & tilt patterns)

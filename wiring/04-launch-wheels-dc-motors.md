@@ -69,9 +69,9 @@ a single-motor test at 980 Hz that kicks at duty 255 for 200 ms, drops to duty 1
 to 255 and back. So a 775 has already seen full duty on the 24 V rail, at least without a
 shuttle. No shot-tuning values were recorded.
 
-> ❓ **OPEN:** If shots were ever tuned by hand on the prototype, I need the duty (0–255 on
-> the 24 V rail) that gave a good shot. Above 128 is out of reach on 12 V, which would reopen
-> the rail question.
+Tilen (2026-10-20): the duty for a good shot is not known yet. It gets found by testing with
+the web app's manual wheel control, on the 12 V rail once it is fitted. If full duty on 12 V
+turns out too slow, the rail question reopens.
 
 ## Until the new buck arrives
 
@@ -96,8 +96,9 @@ one motor are swapped. Mark the wheels L and R and the motor leads + / − once 
 - The Uno test used a 200 ms full-duty kick to overcome stall. Keep that as an option in
   firmware (`WHEEL_KICK_MS`), but on a 12 V rail a plain ramp is probably enough, and on the
   24 V rail a kick must respect `WHEEL_MAX_DUTY`.
-- One PWM line per wheel so left and right can differ later. If they must always match, the
-  firmware writes the same duty to both.
+- Both wheels always run at the same speed (Tilen, 2026-10-20): the firmware writes the same
+  duty to both. They still get one PWM line each, so the second wheel can start a moment
+  after the first.
 - Pull-downs on the PWM lines: during reset the ESP32 pins float, and a floating trigger
   input can turn the module on.
 - The module is not isolated: its header GND is the motor supply ground. Run the ESP32's

@@ -7,17 +7,24 @@
 Both servos ride on the feeder carriage of the redesigned feeder (2026-10; cycle and park
 routine in `controller/README.md`):
 
-| Servo | Signal GPIO | Mechanism | Fixed positions |
-|---|---|---|---|
-| Arms servo (`SERVO_ARMS`) | GPIO 10 | Two arms coupled by gears; closing them grabs the shuttle at the cork, at the bottom of the shuttle tube | OPEN, CLOSED |
-| Lift servo (`SERVO_LIFT`) | GPIO 11 | A pinion on the servo drives a vertical gear rack; the rack carries the arms servo | BOTTOM, TOP |
+| Servo | Signal GPIO | Mechanism | Positions (Tilen, 2026-10-20) | Settle time (default) |
+|---|---|---|---|---|
+| Arms servo (`SERVO_ARMS`) | GPIO 10 | Two arms coupled by gears; closing them grabs the shuttle at the cork, at the bottom of the shuttle tube | OPEN **145°**, CLOSED **154°** | 300 ms |
+| Lift servo (`SERVO_LIFT`) | GPIO 11 | A pinion on the servo drives a vertical gear rack; the rack carries the arms servo | BOTTOM **160°**, TOP **0°** | 800 ms |
 
 The lift servo replaces the Uno-era "spoon" servo on the same pin. The Uno angles (arms
 10°/40°, spoon 180°/105°/0°) belong to the old mechanism and are not reused.
 
-> ❓ **OPEN:** Before I put default angles into `config.h` I need the four positions of the
-> redesigned mechanism (arms OPEN and CLOSED, lift BOTTOM and TOP) and the time each move
-> needs to settle. If they are not known yet, the smoke test below finds them in a few minutes.
+The angles go into `config.h` as defaults; the app can adjust them and stores the values in
+flash. The settle times were not measured. 300 ms for the 9° arms move is what the old arms
+needed to close; 800 ms for the lift is the servo's 0.13 s/60° over 160°, doubled for load,
+plus margin. Both are adjustable in the app. Tilen's understanding is that these servos use
+**0-160°**, so the firmware clamps every command to that range (`SERVO_MAX_DEG = 160`).
+
+> ❓ **OPEN:** Before the first servo test on the ESP32 I need a yes that these four angles were
+> found with the Uno and its `Servo` library (for example `servo_test.cpp`). If they came from
+> somewhere else (a servo tester, another library), tell me which, because the pulse range
+> below must match the tool that found them.
 
 ## What changes compared with the Uno
 
@@ -31,10 +38,14 @@ The lift servo replaces the Uno-era "spoon" servo on the same pin. The Uno angle
 
 ## Pulse range
 
-The firmware uses the servo's own range, **500–2500 µs** for 0–180°. The Uno `Servo` library
-used 544–2400 µs, so an angle found on the Uno lands a few degrees off on the ESP32. Angles
-found with the smoke test below are already in the firmware's range. The rule: find angles
-and use them with the same pulse range.
+The firmware uses **544-2400 µs for 0-180°**, the range of the Uno `Servo` library (and
+ESP32Servo's default). Tilen's angles were found in that scale, so they carry over unchanged.
+The Miuzei accepts 500-2500 µs; the narrower range only gives up a few degrees at each end,
+which the mechanism does not use.
+
+Why it matters: arms OPEN and CLOSED are only 9° apart. Written with a 500-2500 µs range,
+"154°" would land about 7° further than on the Uno and press the arms hard into the cork. The
+rule: angles and pulse range always travel together.
 
 ## Power
 
@@ -85,7 +96,7 @@ output and keep the ESP32 off that rail.
   flexible extension leads with a slack loop (or a small drag chain) and strain relief at both
   ends, so the leads never pull on the servo connectors or snag on the tube.
 
-## Smoke test: find the four angles
+## Smoke test: check the four angles on the ESP32
 
 Servo rail on, ESP32 on USB, common GND, wheels off, carriage away from the tube. The sketch
 sends no pulse to a servo until its first command, so nothing moves at power-up. In the
@@ -95,18 +106,19 @@ serial monitor, type a command and press Enter.
 #include <Arduino.h>
 #include <ESP32Servo.h>
 
-// Feeder servo angle finder. Serial monitor at 115200 baud:
-//   a 90   -> arms servo to 90°
-//   l 45   -> lift servo to 45°
+// Feeder servo angle check. Serial monitor at 115200 baud:
+//   a 145  -> arms servo to 145° (OPEN)
+//   l 160  -> lift servo to 160° (BOTTOM)
 // A servo gets no pulses, and so does not move, until its first command.
 
 const int ARMS_PIN = 10, LIFT_PIN = 11;
-const int PULSE_MIN_US = 500, PULSE_MAX_US = 2500;   // Miuzei spec; the firmware uses the same
+const int PULSE_MIN_US = 544, PULSE_MAX_US = 2400;   // Uno Servo library range; the firmware uses the same
+const int MAX_DEG = 160;                             // SERVO_MAX_DEG in the firmware
 
 Servo arms, lift;
 
 void moveServo(Servo &s, int pin, const char *name, int deg) {
-  deg = constrain(deg, 0, 180);
+  deg = constrain(deg, 0, MAX_DEG);
   if (!s.attached()) {
     s.setPeriodHertz(50);
     s.attach(pin, PULSE_MIN_US, PULSE_MAX_US);
@@ -134,18 +146,15 @@ void loop() {
 Procedure:
 
 1. On its first command a servo jumps to the commanded angle at full speed and full torque.
-   If the mechanism cannot take an arbitrary angle (rack at its end, arms against each other),
-   unmesh the pinion or take the arms off for that first command, then re-mesh at the
-   position just commanded.
-2. Move in small steps (5°, then 1–2°) towards each end position. Stop as soon as the servo
-   hums at rest: it is pushing against the mechanism. Back off 2–3° from there. A 15 kg servo
-   held in stall overheats and strips the rack.
-3. For CLOSED, use a shuttle: the arms should hold the cork firmly. Every degree past first
-   contact adds holding current and heat, so stop just past it.
-4. Note `ARMS_OPEN`, `ARMS_CLOSED`, `LIFT_BOTTOM` and `LIFT_TOP` (arms around the cork of the
-   lowest shuttle in the tube), and roughly how long each move takes. The spec gives about
-   0.2 s per 90° without load; double that under load and add margin.
-5. Write the values into this file in place of the open note above.
+   Send the known positions first: `a 145` (arms OPEN), then `l 160` (lift BOTTOM). The
+   firmware's start-up does the same, in the same order.
+2. `l 0` (TOP) and back to `l 160`. At both ends the servo must go quiet at rest. If it hums,
+   it is pushing against the mechanism: move 2-3° back from the end (`l 2`, `l 158`). A 15 kg
+   servo held in stall overheats and strips the rack.
+3. With a shuttle in the arms: `a 154` (CLOSED) must hold the cork firmly without humming,
+   `a 145` must let it go.
+4. Note roughly how long each move takes, to check the 300 ms and 800 ms defaults above.
+5. If an angle had to change, write the new value into the table above.
 
 Jitter or twitching = servo rail too weak or missing capacitor. A servo that never moves =
 check the signal pin number and that the servo GND is connected to the ESP32 GND.

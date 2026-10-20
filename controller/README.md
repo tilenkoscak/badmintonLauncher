@@ -46,10 +46,13 @@ controller/
 | UI delivery | Single `index.html` (CSS and JS inline), gzipped and embedded in the firmware as a byte array by a PlatformIO pre-build script | One upload, no filesystem image to flash, 16 MB flash is plenty |
 | No external resources in the UI | Everything inline, no CDN, no web fonts | The phone has **no internet** while connected to the robot |
 | Framework and toolchain | Arduino framework (arduino-esp32 core 3.x), **PlatformIO** in VS Code or Cursor (decided 2026-10-05) | Tilen knows Arduino, and his later Uno code is already a PlatformIO project. Library versions pinned in `platformio.ini`; one environment per smoke test, as in the Uno project |
-| Libraries (candidates) | `ESPAsyncWebServer` + `AsyncTCP` (ESP32Async forks) for HTTP + WebSocket · `AccelStepper` first (the Uno code uses it, ports 1:1), `FastAccelStepper` if hardware-timed pulses are needed · `ESP32Servo` with the servo's own pulse range 500–2500 µs · built-in LEDC for wheel PWM · `Preferences` for settings in flash | Versions pinned when the firmware skeleton is started |
+| Libraries (candidates) | `ESPAsyncWebServer` + `AsyncTCP` (ESP32Async forks) for HTTP + WebSocket · `AccelStepper` first (the Uno code uses it, ports 1:1), `FastAccelStepper` if hardware-timed pulses are needed · `ESP32Servo` with the Uno `Servo` library's pulse range 544-2400 µs, in which Tilen's angles were found · built-in LEDC for wheel PWM · `Preferences` for settings in flash | Versions pinned when the firmware skeleton is started |
+| Phone and browser | **Android phone, Brave browser** (Chromium engine). iOS is not a target (Tilen, 2026-10-20) | Practical notes for opening the app in `webapp/README.md` |
+| v1 scope | Complete **manual control** of every subsystem for testing, plus START/END positions for pan and tilt. **No drills and no auto-feed in v1** (Tilen, 2026-10-20) | The hardware gets proven and the shot parameters found first |
+| Wheel speed | One speed for both wheels (Tilen, 2026-10-20). Two PWM lines remain, so the second wheel starts a moment after the first | Spin shots are not wanted |
 | Wheel rail and duty cap | 12 V rail (buck ordered). `WHEEL_MAX_DUTY = min(100 %, 12 V / WHEEL_RAIL_V)` with `WHEEL_RAIL_V = 24` until the new buck is fitted and measured. UI "100 %" maps to the cap | The 775 motors are 12 V (`wiring/04-launch-wheels-dc-motors.md`) |
 | Wheel PWM frequency | `WHEEL_PWM_HZ` ≈ 16 kHz (10 kHz if the modules run hot), never above 20 kHz | Limit of the MOSFET modules; high frequency keeps current ripple low |
-| Pan/tilt limits | Taught from the app (jog to each end, confirm) and stored in flash, as the prototype did with two buttons; endstops optional later | `reference-uno/README.md` |
+| Pan/tilt limits | START and END taught from the app (jog to each end, confirm), stored in flash and enforced as soft limits, as the prototype did with two buttons. How an axis finds its reference after a power-up is still open (below) | `reference-uno/README.md` |
 | Feeder | Carriage homed against the optical endstop (`FEED_HOME_ACTIVE_LEVEL = LOW`). Carriage positions PARK, TUBE and WHEELS and the four servo angles are taught from the app and stored in flash | Redesigned mechanism, next section |
 | Empty tube | No sensor in v1. The app counts shots against the number of shuttles the user says are loaded. An IR sensor on GPIO 40 (`SHUTTLE_SENSE`) can come later | With an empty tube the gripper simply closes on nothing, which the firmware cannot see |
 
@@ -59,8 +62,8 @@ Mechanism (redesigned 2026-10; replaces the Uno-era "spoon" design): the feeder 
 moves a **carriage** horizontally between the shuttle tube and the wheels. On the carriage,
 the **lift servo** turns a pinion that drives a vertical gear rack. The rack carries the
 **arms servo**, whose two geared arms close around the shuttle's cork. Each servo has two
-fixed positions (arms OPEN/CLOSED, lift BOTTOM/TOP). The carriage has three taught
-positions, counted in steps from the endstop:
+fixed positions (arms OPEN 145° / CLOSED 154°, lift BOTTOM 160° / TOP 0°; defaults that the
+app can adjust). The carriage has three taught positions, counted in steps from the endstop:
 
 | Carriage position | Meaning |
 |---|---|
@@ -107,7 +110,8 @@ At start-up the firmware does not know the state, so it uses the simpler order a
 safe because the wheels are off at power-up.
 
 Servos do not report their position, so each servo move waits a fixed settle time
-(`SERVO_SETTLE_MS`, found during setup; the old mechanism needed 300–750 ms per move).
+(defaults 300 ms for the arms and 800 ms for the lift, adjustable in the feeder setup; the old
+mechanism needed 300-750 ms per move).
 
 Homing direction depends on where the endstop sits. On the Uno-era feeder it was at the
 front end of the stroke, towards the wheels. Homing therefore only runs with the wheels off,
@@ -120,15 +124,17 @@ wherever the endstop is.
 
 ## Decisions still open
 
-> ❓ **OPEN:** Before I write the web app I need to know which phone(s) it must run on
-> (Android, iPhone, both) and the browser. iOS Safari behaves differently on access points
-> without internet (captive-portal popup), which affects how the app is opened.
-
-> ❓ **OPEN:** Before I design the control layout I need the pan and tilt ranges in degrees
-> and whether the two wheels need independent speeds.
-
-> ❓ **OPEN:** Which drills matter for v1? (fixed interval feed, random pan/tilt within a
-> window, programmed sequences, saved "shots").
+> ❓ **OPEN:** Pan and tilt have no endstops, so after a power-up the firmware does not know
+> where the axes stand, and START/END stored in flash are only valid once that reference is
+> back. Before I write the limit code I need Tilen's choice:
+> (a) re-teach START and END at every power-up, as the prototype did;
+> (b) **recommended:** teach START and END once; at each power-up jog each axis to a mark on
+> the frame at its START and tap "this is START", and END follows from the stored span;
+> (c) add a home sensor per axis (GPIO 2 and 42 are reserved) and home automatically, like the
+> feeder carriage.
+> Until an axis has its reference, the firmware only allows slow jogging on it. I read
+> "start/end positions" as the two ends of each axis' allowed range; if it meant something
+> else (for example the two ends of a sweep), tell me.
 
 ## Safety requirements (not negotiable, designed in from the first commit)
 
@@ -159,16 +165,22 @@ wherever the endstop is.
 
 ## Web app v1: feature list
 
+Scope (Tilen, 2026-10-20): complete manual control for testing, plus START/END positions for
+pan and tilt. No drills, no auto-feed. Target: Android phone, Brave browser.
+
 - Connection indicator (connected / reconnecting / lost) and round-trip latency.
 - **E-STOP** (red, full width, sticky).
-- Wheels: master speed slider 0–100 % (of the cap), START / STOP, optional left/right trim.
-- Aim: pan/tilt jog pad (tap = small step, hold = continuous), numeric readout, and a
-  "set limits" mode: jog to each end and confirm, as the prototype did with two buttons;
-  limits persist in flash.
-- Feed: "Feed one" button, auto-feed interval slider, START / STOP auto-feed, shot counter
-  against the number of shuttles loaded.
-- Feeder setup: jog the carriage and save PARK, TUBE and WHEELS; set and test the four servo
-  angles and their settle times; everything stored in flash.
+- Wheels: one speed slider 0-100 % (of the cap) for both wheels, START / STOP, and the duty
+  actually applied. This is the tool for finding the duty that gives a good shot.
+- Aim: pan and tilt jog (tap = small step, hold = continuous, selectable speed), go to a typed
+  position, readout in degrees (from the gear ratio; approximate for pan) and in steps.
+  Per axis: "set START" and "set END" (jog there, confirm), go to START / END / centre.
+  Stored in flash and enforced as soft limits.
+- Feeder, manual: every step on its own button (home carriage, carriage to PARK / TUBE /
+  WHEELS, carriage jog, arms OPEN / CLOSED, lift BOTTOM / TOP), plus "Feed one" for the full
+  cycle and "Park". The interlocks of the state machine apply to every button.
+- Feeder setup: save PARK, TUBE and WHEELS from the current carriage position; set and test
+  the four servo angles and their settle times; everything stored in flash.
 - Status line: wheel duty, pan/tilt position, feeder state, e-stop state, uptime.
 - Mobile-first layout: portrait phone, thumb-reachable, big controls, works in landscape.
 
@@ -178,10 +190,9 @@ wherever the endstop is.
    Test from the phone.
 2. Wheel control with heartbeat and e-stop (bare motor shafts, no disks), with
    `WHEEL_RAIL_V` matching the buck actually fitted.
-3. Pan/tilt jog with acceleration; limit teach-in and soft limits.
-4. Feeder: start-up and park routines, carriage homing, setup screen for positions and servo
-   angles, then a single shot.
-5. Auto-feed with interval; feeder interlock on wheel speed.
-6. Drills, presets.
-7. Nice-to-have: mDNS name (`launcher.local`), OTA updates over Wi-Fi, RPM feedback per
+3. Pan/tilt jog with acceleration; START/END teach-in and soft limits.
+4. Feeder: start-up and park routines, carriage homing, manual step buttons, setup screen
+   for positions and servo angles, then a single shot. That completes web app v1.
+5. After v1: auto-feed with interval (feeder interlock on wheel speed), drills, presets.
+6. Nice-to-have: mDNS name (`launcher.local`), OTA updates over Wi-Fi, RPM feedback per
    wheel, empty-tube sensor.

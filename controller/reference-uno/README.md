@@ -117,13 +117,14 @@ from 3.3 V or its output divided (`../../wiring/06-optical-endstop.md`).
 
 ## Porting notes for the ESP32 firmware
 
-- **Servo pulse range:** the Uno `Servo` library maps 0–180° onto 544–2400 µs; the ESP32
-  firmware uses the Miuzei's own 500–2500 µs. That only matters when reusing an Uno-era
-  angle, which the redesigned feeder does not: its angles are found on the ESP32.
+- **Servo pulse range:** the Uno `Servo` library maps 0-180° onto 544-2400 µs, and the ESP32
+  firmware uses the same range. Tilen's angles for the redesigned feeder (arms 145°/154°,
+  lift 160°/0°) are in that scale and carry over unchanged.
 - **AccelStepper ports 1:1** (the library supports ESP32) and the ESP32 easily delivers the
   step rates the Uno could not. FastAccelStepper only if hardware-timed pulses are needed later.
-- **Microstepping:** hard-wire M0–M2 with jumpers per `../../wiring/pin-map.md` instead of
-  driving them from a GPIO; the multiplier then lives in `config.h` per axis.
+- **Microstepping:** hard-wire M0-M2 with jumpers per `../../wiring/pin-map.md` (1/8 on all
+  three drivers) instead of driving them from a GPIO; the resolution then lives in `config.h`
+  per axis.
 - **Feeder speed:** start at ~150 RPM (what actually ran), tune up.
 - **Pan/tilt limits:** offer the same teach-in from the web app and persist the limits in
   flash. Endstops for pan and tilt become optional.

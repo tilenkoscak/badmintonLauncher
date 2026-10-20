@@ -1,9 +1,10 @@
 # 02 · Steppers: pan, tilt and feeder through DRV8825
 
 Three identical circuits on the **24 V** rail (PSU output 1). The motors are NEMA 17
-steppers salvaged from an Artillery Sidewinder X3 Plus (two Z-axis "42-35" motors and one
-from another axis), estimated at 1.2–1.7 A per phase. Each DRV8825 already carries its
-100 µF / 50 V capacitor. Only the STEP/DIR pins differ (see `pin-map.md`):
+steppers salvaged from an Artillery Sidewinder X3 Plus, label **42SHDC1067Z-15WD** (rated
+current not published). Pan drives its axis through a ≈ 1:36.57 planetary gearbox, tilt
+through 1:72. Each DRV8825 already carries its 100 µF / 50 V capacitor and is set to
+Vref 0.6 V. Only the STEP/DIR pins differ (see `pin-map.md`):
 
 | Axis | STEP | DIR | ENABLE | FAULT (optional) |
 |---|---|---|---|---|
@@ -19,8 +20,9 @@ from another axis), estimated at 1.2–1.7 A per phase. Each DRV8825 already car
 - STEP/DIR at 3.3 V are fine: the DRV8825 treats anything above 2.2 V as high.
 - The step pulses themselves are the same idea. The ESP32 can also generate them in hardware
   (FastAccelStepper uses the RMT/MCPWM peripherals), which frees the CPU for Wi-Fi.
-- VMOT, current limits and microstep jumpers stay exactly as tuned on the Uno prototype. The
-  drivers can move over as they are; only the logic-side wires change.
+- VMOT and the current limits (Vref 0.6 V) stay as on the Uno prototype. The microstep pins,
+  which the Uno drove from its pin 9, get fixed jumpers instead (1/8, see below). Otherwise
+  the drivers move over as they are; only the logic-side wires change.
 
 ## Connections
 
@@ -28,9 +30,9 @@ from another axis), estimated at 1.2–1.7 A per phase. Each DRV8825 already car
                     DRV8825 carrier, top view, potentiometer at the top
                     ┌──────────────────────────────────┐
    ESP32 GPIO 17 ───┤ ENABLE                      VMOT ├─── +24 V rail (PSU output 1) ─┐
-   3V3 / open   ────┤ M0                           GND ├─── 24 V rail GND (star point)  ├─ 100 µF / 50 V,
-   3V3 / open   ────┤ M1                            2B ├─── coil B                      │  already fitted
-   3V3 / open   ────┤ M2                            2A ├─── coil B                     ─┘
+   3V3          ────┤ M0                           GND ├─── 24 V rail GND (star point)  ├─ 100 µF / 50 V,
+   3V3          ────┤ M1                            2B ├─── coil B                      │  already fitted
+   open         ────┤ M2                            2A ├─── coil B                     ─┘
    3V3          ────┤ RESET                         1A ├─── coil A
    3V3          ────┤ SLEEP                         1B ├─── coil A
    ESP32 STEP   ────┤ STEP                       FAULT ├─── (optional) ESP32 GPIO 18, INPUT_PULLUP
@@ -47,7 +49,7 @@ from another axis), estimated at 1.2–1.7 A per phase. Each DRV8825 already car
 | FAULT | ESP32 GPIO 18 (optional) | Open-drain, low on over-current / over-temperature. Measure that it idles ≤ 3.3 V before connecting. Wire-OR the three drivers to one input |
 | GND (beside FAULT) | ESP32 GND | Logic ground. This is what makes ESP32 and driver share a reference |
 | ENABLE | ESP32 GPIO 17, plus **10 kΩ pull-up to 3V3** | Active-low. The chip has a weak pull-down, so a floating ENABLE = motor energised. The pull-up keeps drivers off until firmware pulls the line low |
-| M0, M1, M2 | 3V3 or open | Microstepping, see table. Open = low. Wire them per driver; they can differ between axes |
+| M0, M1, M2 | M0 and M1 to 3V3, M2 open | 1/8 microstepping on all three drivers, see table. Open = low |
 | RESET | 3V3 | Must be high or the driver does nothing |
 | SLEEP | 3V3 | Must be high. Tying RESET and SLEEP together and to 3V3 is the standard trick |
 | STEP | ESP32 GPIO 4 / 6 / 15 | One rising edge = one (micro)step. Pulse ≥ 1.9 µs high and low |
@@ -72,12 +74,26 @@ multiplier of 2 while sharing that same microstep pin, so their real jumpering i
 Speeds: feeder commanded 500 RPM (the Uno actually managed about 150), pan and tilt 50 RPM
 with 50 RPM/s acceleration.
 
-Proposal for the ESP32 build: **1/16 for pan and tilt** (smooth, quiet aiming), **1/8 for the
-feeder** (as on the prototype; the carriage positions are taught in microsteps, so this must not
-change after teaching). Jumper M0–M2 to 3V3
-per driver as in `pin-map.md` instead of driving them from a GPIO. Higher microstepping
-means more pulses per second; at 1/16 and 2 rev/s that is 6 400 pulses/s, trivial for
-the ESP32, and 150 RPM at 1/8 on the feeder is 4 000 pulses/s.
+ESP32 build: **1/8 on all three drivers**, M0 and M1 jumpered to 3V3, M2 open, instead of
+driving them from a GPIO (`pin-map.md`). That is what the Uno's pin 9 set where it was
+wired. Positions are taught in microsteps, so the setting must not change after teaching.
+
+## Gearing and steps per degree
+
+| Axis | Gearing (Tilen) | Microsteps per output degree at 1/8 | Example: 30°/s at the axis |
+|---|---|---|---|
+| Pan | 2-stage planetary, ≈ 1:36.57 | 1600 × 36.57 / 360 ≈ **162.5** | motor 183 RPM, 4 900 pulses/s |
+| Tilt | 1:72 | 1600 × 72 / 360 = **320** | motor 360 RPM, 9 600 pulses/s |
+| Feeder carriage | positions taught in steps | 1600 per motor revolution | 150 RPM = 4 000 pulses/s |
+
+Why 1/8 and not 1/16: the gearboxes already give a resolution far finer than aiming needs
+(0.006° per microstep on pan), and 1/16 would double the pulse rates above for no visible
+gain. Even all three axes at once stay below 20 000 pulses/s, comfortable for the ESP32.
+
+The prototype's 50 RPM is only about 8°/s of pan and 4°/s of tilt through these gearboxes.
+The ESP32 can go faster; the speeds get tuned on the machine. The pan ratio is approximate,
+so the app's pan degrees are approximate as well; positions and limits are stored in
+microsteps and are exact.
 
 ## Setting the current limit
 
@@ -99,13 +115,12 @@ The DRV8825 needs VMOT present to produce its reference voltage, so:
    Above ~1 A per phase fit the heatsink, above ~1.5 A add airflow. The feeder can usually
    run lower than pan and tilt, which helps the 4.2 A budget of the 24 V rail.
 
-Since the pots were already tuned on the Uno prototype, the practical procedure is: measure
-the Vref on each driver as it is, write the three values into this file, and compare them
-with the table once the motor labels are read.
-
-> ❓ **OPEN:** Before I can fill in the final Vref values I need the label text of each motor
-> (`PARTS.md` #3), the sense-resistor marking on the drivers (`R100` vs `R200`, `PARTS.md` #2)
-> and the Vref currently measured on each of the three drivers.
+**Measured on the prototype (Tilen, 2026-10-20): Vref = 0.6 V on all three drivers.** The
+motor's rated current is not published (label 42SHDC1067Z-15WD) and the sense-resistor
+marking was not read; with the usual R100 that is 1.2 A per phase. These settings run the
+prototype, so they stay. Check by touch after the first long session: warm is fine, too hot
+to hold for a few seconds means turn Vref down by 0.05 V. At 1.2 A the drivers want their
+heatsinks.
 
 ## Enable strategy
 

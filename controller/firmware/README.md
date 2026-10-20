@@ -12,8 +12,9 @@ firmware/
     config.h                every GPIO from wiring/pin-map.md, Wi-Fi SSID/password, limits,
                             WHEEL_RAIL_V (24 until the 12 V buck is fitted) and the derived
                             WHEEL_MAX_DUTY, WHEEL_PWM_HZ, FEED_HOME_ACTIVE_LEVEL (LOW),
-                            FEED_HOME_DIR, servo pulse range 500–2500 µs, default servo angles
-                            and settle times, microstep multipliers per axis
+                            FEED_HOME_DIR, servo pulse range 544-2400 µs and SERVO_MAX_DEG 160,
+                            default servo angles (arms 145/154, lift 160/0) and settle times
+                            (300/800 ms), microsteps (8) and gear ratios (pan 36.57, tilt 72)
     web_index.h             generated: gzipped ../webapp/index.html as a byte array
   src/
     main.cpp                setup()/loop(): boot to safe state, start Wi-Fi + server, run tasks
