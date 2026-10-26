@@ -104,7 +104,8 @@ one motor are swapped. Mark the wheels L and R and the motor leads + / − once 
 - The module is not isolated: its header GND is the motor supply ground. Run the ESP32's
   ground wire to the star point, not to the module's DC− screw terminal, so the wheel current
   does not flow through the thin signal ground.
-- OUT− is **not** ground. When the module is off, the whole motor sits at rail voltage.
+- OUT− is **not** ground (low-side switching confirmed: DC+ and OUT+ are connected, measured
+  2026-10-21). When the module is off, the whole motor sits at rail voltage.
   Never tie OUT− or a motor terminal to the ESP32 GND.
 
 ## Wiring rules for the power side

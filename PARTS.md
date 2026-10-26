@@ -26,7 +26,7 @@ the three steppers, the dual-output power supply and the optical endstop.
 | 10 | Electrolytic capacitor 1000 µF / 50 V | 2 | Buffer across each MOSFET module input | Known, correctly placed |
 | 11 | TVS diode 1.5KE30A | 2 | Over-voltage clamp across each MOSFET module input | Known, correctly placed |
 | 12 | MEAN WELL N7805-1CW switching regulator, 5 V / 1 A | 1 | 24 V → 5 V, today for the servos | Confirmed 5 V. **Undersized for two 15 kg servos** |
-| 13 | Optical endstop from the Sidewinder X3 Plus | 1 | Home of the feeder carriage and overtravel guard | Logic known from the Uno code (LOW when triggered); model, 3.3 V behaviour and position on the new carriage to confirm |
+| 13 | Endstop sensor from the Sidewinder X3 Plus, called "optical endstop" so far; most likely its inductive bed-levelling sensor | 1 | Home of the feeder carriage and overtravel guard | Logic known from the Uno code (LOW when triggered); position known (front of the travel); type and supply voltage to confirm with a steel test |
 | 14 | Arduino Uno | 1 | Prototype controller, being replaced | Its code is in `controller/reference-uno/` |
 
 ---
@@ -207,18 +207,15 @@ Salvaged from the printer. Mains input, two DC outputs:
 Because the supply is a mains unit, the robot is treated as **mains-powered**; the battery
 option from the first draft is dropped.
 
-> ❓ **OPEN:** Before I finish `wiring/05-power.md` I need:
-> 1. A photo of the PSU label (model number and ratings), so I can look up its datasheet.
-> 2. Whether it has a mains switch, and whether it came with a fan.
-> 3. Optional, one continuity test: are the negatives of the two outputs joined inside the
->    PSU? It does not change our wiring (everything meets at the star point anyway); it tells
->    whether there is a second, hidden ground path, useful if noise problems ever show up.
->    How: mains plug **out** for a few minutes. Take the wires off the two **−** output screws
->    (the prototype probably joins them already through the Uno's GND, which would fake a
->    result). Multimeter on Ω or continuity, one probe on the − of output 1 (24 V), the other
->    on the − of output 2 (36 V). Report "beeps / about 0 Ω" or "no beep / OL". A reading that
->    starts low and keeps climbing is the output capacitors charging and counts as "no beep".
->    Keep the probes away from the L and N mains screws on the same terminal strip.
+Measured by Tilen (2026-10-21): **no continuity between the - of output 1 and the - of
+output 2**, so the two outputs are isolated from each other inside the PSU. Consequence: the
+star point is the **only** connection between the 24 V side (steppers, N7805, ESP32, servos)
+and the wheel side (buck, MOSFET modules). Without that wire the ESP32's PWM signal has no
+reference at the MOSFET modules. See `wiring/05-power.md`.
+
+> ❓ **OPEN:** Before I finish `wiring/05-power.md` I need a photo of the PSU label (model
+> number and ratings), so I can look up its datasheet, and whether the PSU has a mains switch
+> and came with a fan.
 
 ## 7. Buck converter for the wheel rail: 12 V / 30 A ordered
 
@@ -272,7 +269,7 @@ Switch Drive PWM Regulator Module*. The common 34 × 17 mm green module.
 |---|---|
 | Load supply | DC 5 – 36 V (12 V once the new buck is fitted, 24 V until then) |
 | Current | 15 A continuous, 30 A peak, 400 W; heatsink needed above ~10 A |
-| Switch type | Two N-channel MOSFETs in parallel, **low-side**: OUT+ is internally tied to DC+, the MOSFETs switch OUT− |
+| Switch type | Two N-channel MOSFETs in parallel, **low-side**: OUT+ is internally tied to DC+, the MOSFETs switch OUT−. Confirmed by measurement (DC+ to OUT+ beeps, 2026-10-21) |
 | Trigger / PWM input | **Digital 3.3 – 20 V** ⇒ drives directly from an ESP32 GPIO |
 | PWM frequency | 0 – 20 kHz |
 | Isolation | None. The trigger GND is the same node as DC− |
@@ -284,14 +281,9 @@ One module per wheel. Details in `wiring/04-launch-wheels-dc-motors.md`.
 The Uno test drove the module at 980 Hz (`analogWrite` on pin 5), so the module is proven at
 that frequency; the ESP32 will use ≈ 16 kHz, inside the module's 0–20 kHz rating.
 
-> ❓ **OPEN:** One quick check on one module, to confirm it switches the low side as the docs
-> and diagrams assume. Wheel power off; the module may stay wired. Multimeter on Ω (or
-> continuity), probes on the **DC+** and **OUT+** screw terminals. Report the reading:
-> about 0 Ω (beep) means OUT+ is a plain copper connection to DC+ and the MOSFETs switch OUT−,
-> which is why OUT− and the motor terminals must never be tied to ground. A high reading
-> means the module is built differently and I recheck `wiring/04-launch-wheels-dc-motors.md`.
-> (Do not bother measuring DC− to OUT−: the MOSFETs' built-in diode makes that reading
-> confusing.)
+Checked by Tilen (2026-10-21): DC+ and OUT+ are connected (the multimeter beeps), so the
+module switches the low side as assumed. OUT- and the motor terminals are therefore never
+ground and must never be tied to it.
 
 ## 10. Electrolytic capacitor 1000 µF / 50 V (×2)
 
@@ -331,8 +323,12 @@ prototype got away with it because the feeder loads are light. Two acceptable la
 
 ## 13. Optical endstop (from the Sidewinder X3 Plus)
 
-An Artillery-style optical endstop board: a slotted infrared photo-interrupter, an indicator
-LED and a 3-wire connector (VCC, GND, SIGNAL). Unlike a mechanical micro switch it needs
+Assumed so far to be a slotted optical endstop. **The photo (2026-10-23) shows otherwise:** a
+small black sensor body with a round sensing face at one end, a mounting hole, an indicator
+LED and a three-wire cable with a white 3-pin plug. That matches the X3 Plus's **inductive
+bed-levelling sensor** (Artillery: "Inductive Levelling Sensor for SW-X3/SW-X4"), a proximity
+sensor that reacts to metal, steel best, a few millimetres in front of its round face.
+Artillery publishes no voltage, output type or pinout for it. Like any such sensor it needs
 power and produces an active logic level rather than a dry contact.
 
 Role, from the Uno code: it is the **feeder's home sensor and safety limit** ("feeding
@@ -345,14 +341,15 @@ Position (Tilen, 2026-10-20): at the **front** of the carriage travel, towards t
 marks the furthest the feeding mechanism may move: the shuttle still reaches the flywheels
 and the mechanism does not jam into them. The carriage therefore homes towards the wheels.
 
-Level-shifting matters here: on the Uno the board ran from 5 V, so its SIGNAL swung to 5 V,
-which must not reach an ESP32 pin. Plan A is to power it from 3V3 (most of these boards
-work), plan B is a resistor divider on SIGNAL. The operating voltage is not published
-anywhere a web search could find (2026-10-20).
+Level-shifting matters here: on the Uno the sensor ran from 5 V, so its SIGNAL swung to 5 V,
+which must not reach an ESP32 pin. Plan A is to power it from 3V3 (inductive sensors often
+need more), plan B is 5 V with a resistor divider on SIGNAL.
 
-> ❓ **OPEN:** Before I finalize the endstop page I need the result of the quick 3.3 V test in
-> `wiring/06-optical-endstop.md`: the SIGNAL voltage with the slot open and with a card in it,
-> with the board powered from the Uno's 3.3V pin.
+> ❓ **OPEN:** Before I finalize the endstop page I need the bench test in
+> `wiring/06-optical-endstop.md` done with a **steel object** against the round face (the
+> earlier attempts used a card, which this sensor ignores): SIGNAL voltage at rest and with
+> steel, on 3.3 V and on 5 V. Also the three wire colours, and which part of the prototype's
+> carriage triggered it.
 
 ## 14. Arduino Uno (prototype controller)
 
@@ -382,6 +379,5 @@ pins 10 and 11 were suspected faulty as inputs, which is irrelevant for the ESP3
 
 Short version of every `❓ OPEN:` still in the repo, to answer in one go:
 
-1. Optical endstop: SIGNAL voltage with the slot open and blocked, powered from the Uno's 3.3V pin (#13, `wiring/06-optical-endstop.md`).
-2. PSU: photo of the label; mains switch; fan; optionally whether the two outputs' negatives are joined inside (#6, with step-by-step instructions).
-3. MOSFET module: resistance between DC+ and OUT+ on one module, power off (#9).
+1. Endstop sensor (#13): bench test with a steel object against the round face, on 3.3 V and on 5 V; wire colours; what on the prototype's carriage triggered it (`wiring/06-optical-endstop.md`).
+2. PSU: photo of the label; mains switch; fan (#6).

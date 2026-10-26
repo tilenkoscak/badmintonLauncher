@@ -176,7 +176,7 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
   <a href="#steppers">4 Steppers</a>
   <a href="#servos">5 Servos</a>
   <a href="#wheels">6 Launch wheels</a>
-  <a href="#endstop">7 Endstop</a>
+  <a href="#endstop">7 Endstop sensor</a>
   <a href="#power">8 Power</a>
   <a href="#build">9 Build order</a>
   <a href="#open">10 Still open</a>
@@ -214,7 +214,7 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
     <text class="s pm" x="500" y="86" text-anchor="middle">heartbeat watchdog, e-stop</text>
 
     <rect class="box" x="800" y="25" width="180" height="70" rx="10"/>
-    <text class="b" x="890" y="55" text-anchor="middle">Optical endstop</text>
+    <text class="b" x="890" y="55" text-anchor="middle">Endstop sensor</text>
     <text class="s" x="890" y="75" text-anchor="middle">carriage home position</text>
     <path class="w ki" d="M800 60 H624" marker-end="url(#m-in)"/>
     <text class="s xi" x="710" y="52" text-anchor="middle">GPIO 1</text>
@@ -347,7 +347,7 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
       <tr><td class="g">11</td><td>J1-17</td><td><code>SERVO_LIFT</code></td><td>out, 50 Hz</td><td>lift servo signal (orange)</td><td>-</td><td>BOTTOM 160°, TOP 0°</td></tr>
       <tr><td class="g">12</td><td>J1-18</td><td><code>WHEEL_L_PWM</code></td><td>out, 16 kHz</td><td>PWM pin of MOSFET module L</td><td><b>10 kΩ pull-down to GND</b></td><td>wheel off during boot; duty capped by <code>WHEEL_MAX_DUTY</code></td></tr>
       <tr><td class="g">13</td><td>J1-19</td><td><code>WHEEL_R_PWM</code></td><td>out, 16 kHz</td><td>PWM pin of MOSFET module R</td><td><b>10 kΩ pull-down to GND</b></td><td>same duty as L, started a moment after L</td></tr>
-      <tr><td class="g">1</td><td>J3-4</td><td><code>FEED_HOME</code></td><td>in</td><td>optical endstop SIGNAL</td><td>none, the board drives the line</td><td>LOW = carriage at home; endstop powered from 3V3</td></tr>
+      <tr><td class="g">1</td><td>J3-4</td><td><code>FEED_HOME</code></td><td>in</td><td>endstop sensor SIGNAL</td><td>none, the board drives the line</td><td>LOW = carriage at home; endstop powered from 3V3</td></tr>
       <tr><td class="g">48</td><td>J3-16</td><td><code>RGB_LED</code></td><td>out</td><td>onboard RGB LED</td><td>-</td><td>status light; GPIO 38 on some boards, smoke test 1 tells</td></tr>
       <tr><td class="g">2</td><td>J3-5</td><td><code>LIMIT_PAN</code></td><td>in</td><td><i>reserved:</i> pan home sensor</td><td><code>INPUT_PULLUP</code></td><td>not planned: START is confirmed at a frame mark</td></tr>
       <tr><td class="g">42</td><td>J3-6</td><td><code>LIMIT_TILT</code></td><td>in</td><td><i>reserved:</i> tilt home sensor</td><td><code>INPUT_PULLUP</code></td><td></td></tr>
@@ -694,7 +694,7 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
     <text class="s xs" x="470" y="412" text-anchor="middle">PWM 16 kHz, never above WHEEL_MAX_DUTY</text>
     <text class="s" x="470" y="470" text-anchor="middle">signal GND: the header GND is the same node as DC-</text>
   </svg>
-  <figcaption>The module switches the low side: OUT+ is tied to DC+, the MOSFETs switch OUT- to DC-. OUT- is therefore <b>not</b> ground; never tie it or a motor terminal to the ESP32 GND.</figcaption>
+  <figcaption>The module switches the low side (measured: DC+ and OUT+ are connected): OUT+ is tied to DC+, the MOSFETs switch OUT- to DC-. OUT- is therefore <b>not</b> ground; never tie it or a motor terminal to the ESP32 GND.</figcaption>
   </figure>
   <div class="grid2">
     <div class="callout stop"><b>Safety, non-negotiable.</b> No disks on the motors for the first power tests. The web app's E-STOP and the connection watchdog must work before the disks go back on. The physical E-STOP must be reachable without a hand near the wheels.</div>
@@ -705,17 +705,121 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
 
 <!-- 7 ENDSTOP -->
 <section class="card" id="endstop">
-  <h2><span class="n">7</span>Optical endstop: home of the feeder carriage</h2>
-  <p class="lead">The salvaged printer endstop is powered and drives its signal itself: LOW when the slot is blocked. On the Uno it ran from 5 V, which must not reach an ESP32 pin.</p>
+  <h2><span class="n">7</span>Endstop sensor: home of the feeder carriage</h2>
+  <p class="lead">The sensor salvaged from the printer homes the feeder carriage. It is powered and drives its signal itself: LOW when triggered (Uno code). On the Uno it ran from 5 V, which must not reach an ESP32 pin.</p>
   <p class="src">From <code>06-optical-endstop.md</code>.</p>
+  <div class="callout warn"><b>Not a slotted optical endstop.</b> The photo (2026-10-23) shows a small sensor body with a <b>round sensing face</b>, an LED and a three-wire cable: most likely the Sidewinder X3 Plus's <b>inductive bed-levelling sensor</b>. It reacts to <b>steel a few millimetres in front of the round face</b>. Cardboard, plastic, a finger or pressing on it do nothing, which is why the earlier tests never switched.</div>
+
+  <h3>Bench test: Uno + multimeter, no ESP32</h3>
   <figure>
-  <svg viewBox="0 0 1000 430" role="img" aria-label="Optical endstop wiring, plan A and plan B">
-    <text class="b" x="60" y="26">Plan A: power it from 3V3 (try this first)</text>
+  <svg viewBox="0 0 1000 480" role="img" aria-label="Bench test of the endstop sensor with an Arduino Uno and a multimeter">
+    <rect x="40" y="40" width="340" height="190" rx="10" fill="#1565a0" stroke="#0d3f66" stroke-width="1.5"/>
+    <rect x="18" y="62" width="60" height="46" rx="3" fill="#c7ccd4" stroke="#8a919c"/>
+    <rect x="22" y="150" width="52" height="40" rx="3" fill="#222"/>
+    <rect x="150" y="48" width="210" height="14" rx="2" fill="#222"/>
+    <text x="255" y="80" text-anchor="middle" style="fill:#cfe3f3;font-size:11px">digital pins: not used</text>
+    <text x="230" y="112" text-anchor="middle" style="fill:#fff;font-size:17px;font-weight:700">Arduino Uno</text>
+    <text x="230" y="131" text-anchor="middle" style="fill:#cfe3f3;font-size:11.5px">powered over USB from the PC</text>
+    <text x="48" y="128" style="fill:#cfe3f3;font-size:10px">USB</text>
+    <rect x="150" y="200" width="190" height="22" rx="2" fill="#222"/>
+    <g style="fill:#cfe3f3;font-size:10.5px">
+      <text transform="rotate(-90 169 194)" x="169" y="194">IOREF</text>
+      <text transform="rotate(-90 195 194)" x="195" y="194">RESET</text>
+      <text transform="rotate(-90 221 194)" x="221" y="194" style="fill:#fff;font-weight:700">3.3V</text>
+      <text transform="rotate(-90 247 194)" x="247" y="194" style="fill:#fff;font-weight:700">5V</text>
+      <text transform="rotate(-90 273 194)" x="273" y="194" style="fill:#fff;font-weight:700">GND</text>
+      <text transform="rotate(-90 299 194)" x="299" y="194" style="fill:#fff;font-weight:700">GND</text>
+      <text transform="rotate(-90 325 194)" x="325" y="194">VIN</text>
+    </g>
+    <g fill="#d4a72c">
+      <rect x="161" y="207" width="8" height="8"/><rect x="187" y="207" width="8" height="8"/><rect x="213" y="207" width="8" height="8"/>
+      <rect x="239" y="207" width="8" height="8"/><rect x="265" y="207" width="8" height="8"/><rect x="291" y="207" width="8" height="8"/><rect x="317" y="207" width="8" height="8"/>
+    </g>
+    <circle cx="243" cy="211" r="9" fill="none" stroke="#c08552" stroke-width="2" stroke-dasharray="3 3"/>
+
+    <rect x="640" y="20" width="260" height="215" rx="18" fill="#f2c94c" stroke="#a07f12" stroke-width="1.5"/>
+    <rect x="668" y="34" width="204" height="56" rx="6" fill="#c9d4c0" stroke="#6b7b63"/>
+    <text x="770" y="73" text-anchor="middle" style="fill:#1f2a1b;font-size:26px;font-family:ui-monospace,Consolas,monospace">-.-- V</text>
+    <circle cx="770" cy="144" r="34" fill="#2b2b2b"/>
+    <path d="M770 144 L746 120" stroke="#f1f3f5" stroke-width="4" stroke-linecap="round"/>
+    <text x="738" y="112" text-anchor="end" style="fill:#2b2b2b;font-size:12px;font-weight:700">V DC</text>
+    <text x="814" y="134" style="fill:#2b2b2b;font-size:11.5px;font-weight:700">DC volts</text>
+    <text x="814" y="149" style="fill:#2b2b2b;font-size:11.5px">20 V range</text>
+    <text x="690" y="198" text-anchor="middle" style="fill:#5c4a0a;font-size:10.5px">10A: no</text>
+    <text x="760" y="198" text-anchor="middle" style="fill:#2b2b2b;font-size:10.5px;font-weight:700">COM</text>
+    <text x="830" y="198" text-anchor="middle" style="fill:#2b2b2b;font-size:10.5px;font-weight:700">V Ω</text>
+    <circle cx="690" cy="214" r="8" fill="#555"/><circle cx="760" cy="214" r="8" fill="#111"/><circle cx="830" cy="214" r="8" fill="#c92a2a"/>
+
+    <path d="M760 214 V255 H299 V211" fill="none" stroke="#9aa4b2" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M760 214 V255 H299 V211" fill="none" stroke="#111" stroke-width="4.5" stroke-linejoin="round"/>
+    <path d="M830 214 V300 H612" fill="none" stroke="#c92a2a" stroke-width="4.5" stroke-linejoin="round"/>
+    <path d="M612 300 L604 313" stroke="#adb5bd" stroke-width="3" stroke-linecap="round"/>
+    <text class="s" x="520" y="248" text-anchor="middle">black probe (COM) on the Uno's other GND</text>
+    <text class="s" x="722" y="293" text-anchor="middle" style="fill:var(--c12)">red probe (V) on the black wire</text>
+
+    <path d="M217 211 V295 H540 V428 H620" fill="none" stroke="#a0522d" stroke-width="3.5" stroke-linejoin="round"/>
+    <path d="M269 211 V275 H560 V415 H620" fill="none" stroke="#1c7ed6" stroke-width="3.5" stroke-linejoin="round"/>
+    <path d="M620 402 H600 V321" fill="none" stroke="#9aa4b2" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M620 402 H600 V321" fill="none" stroke="#111" stroke-width="3.5" stroke-linejoin="round"/>
+    <circle cx="600" cy="318" r="3.5" fill="#c08552"/>
+    <text class="s" x="228" y="313" style="fill:#c08552">brown = + (VCC): Uno 3.3V, on the second try 5V</text>
+    <text class="s" x="330" y="270" style="fill:var(--sig)">blue = - (GND): Uno GND</text>
+    <text class="s" x="610" y="364">black = SIGNAL: connects to nothing else</text>
+
+    <rect x="620" y="392" width="30" height="46" rx="3" fill="#f1f3f5" stroke="#adb5bd"/>
+    <circle cx="620" cy="402" r="3" fill="#888"/><circle cx="620" cy="415" r="3" fill="#888"/><circle cx="620" cy="428" r="3" fill="#888"/>
+    <path d="M650 415 H702" stroke="#9aa4b2" stroke-width="10" stroke-linecap="round"/>
+    <path d="M650 415 H702" stroke="#111" stroke-width="7" stroke-linecap="round"/>
+    <rect x="700" y="395" width="150" height="40" rx="4" fill="#1d1d1d" stroke="#666"/>
+    <circle cx="792" cy="415" r="7" class="open" style="stroke:#666"/>
+    <circle cx="726" cy="403" r="3" fill="#ff922b"/>
+    <text class="s" x="726" y="388" text-anchor="middle">LED</text>
+    <circle cx="862" cy="415" r="20" fill="#2b2b2b" stroke="#777" stroke-width="1.5"/>
+    <circle cx="862" cy="415" r="11" fill="#3a3a3a"/>
+    <circle cx="930" cy="415" r="22" fill="#b8bec7" stroke="#6c757d" stroke-width="1.5"/>
+    <circle cx="930" cy="415" r="8" class="open" style="stroke:#6c757d"/>
+    <path d="M905 440 H888" stroke="var(--ink)" stroke-width="1.5" marker-end="url(#m-sig)"/>
+    <text class="b" x="930" y="374" text-anchor="middle">steel</text>
+    <text class="s" x="930" y="388" text-anchor="middle">washer or blade</text>
+    <text class="s" x="896" y="458" text-anchor="middle">0-2 mm</text>
+    <text class="s" x="620" y="472">sensor from the printer: the round face is the sensing side</text>
+  </svg>
+  <figcaption>Wire colours follow the usual sensor code (brown +, blue -, black signal); the order inside the white plug may differ. If your wires have other colours, use the order of your very first attempt, the one that gave about 2.4 V at rest.</figcaption>
+  </figure>
+  <div class="grid2">
+    <div class="callout info">
+      <b>Steps</b>
+      <ol>
+        <li>Sensor unplugged from everything else; Uno on USB.</li>
+        <li>Brown to <b>3.3V</b>, blue to <b>GND</b>. The black wire touches nothing but the red probe.</li>
+        <li>Meter on <b>DC volts, 20 V</b>; leads in <b>COM</b> and <b>V</b>. Black probe on the Uno's other GND, red probe on the black wire.</li>
+        <li>Note the reading with nothing near the round face. Then hold <b>steel</b> flat against the face and note it again. Watch the LED.</li>
+        <li>Repeat with brown on <b>5V</b> instead of 3.3V.</li>
+      </ol>
+      Expected when it works: two clearly different, steady values, one near 0 V. Send all four numbers.
+    </div>
+    <div class="callout stop">
+      <b>Common mistakes</b>
+      <ul>
+        <li>Testing with cardboard, plastic or a finger: this sensor only sees metal.</li>
+        <li>Steel too far away: hold it flat, touching the round face or within 1-2 mm.</li>
+        <li>Meter on AC volts (V with a wavy line) instead of DC volts (V with a straight line).</li>
+        <li>Red lead in the 10A jack instead of the V jack.</li>
+        <li>Black probe on something other than the Uno's GND: the meter, the sensor and the Uno must share the same ground.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Connection to the ESP32 (after the bench test)</h3>
+  <figure>
+  <svg viewBox="0 0 1000 430" role="img" aria-label="Endstop sensor wiring to the ESP32, plan A and plan B">
+    <text class="b" x="60" y="26">Plan A: power it from 3V3 (only if the bench test switches on 3.3 V)</text>
     <rect class="box" x="60" y="40" width="220" height="140" rx="8"/>
-    <rect x="85" y="58" width="22" height="78" rx="3" fill="#868e96"/><rect x="123" y="58" width="22" height="78" rx="3" fill="#868e96"/>
-    <text class="s" x="115" y="156" text-anchor="middle">slot</text>
-    <text class="b" x="205" y="64" text-anchor="middle">Optical</text>
-    <text class="b" x="205" y="82" text-anchor="middle">endstop</text>
+    <rect x="75" y="54" width="100" height="30" rx="3" fill="#1d1d1d" stroke="#666"/>
+    <circle cx="186" cy="69" r="13" fill="#2b2b2b" stroke="#777"/>
+    <circle cx="92" cy="61" r="2.5" fill="#ff922b"/>
+    <text class="b" x="72" y="130">Endstop sensor</text>
+    <text class="s" x="72" y="150">steel in front of the round face</text>
     <text x="272" y="104" text-anchor="end">VCC</text><text x="272" y="134" text-anchor="end">GND</text><text x="272" y="164" text-anchor="end">SIG</text>
     <rect class="pcb" x="700" y="40" width="180" height="140" rx="10"/>
     <text class="b pi" x="790" y="68" text-anchor="middle">ESP32-S3</text>
@@ -723,14 +827,15 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
     <path class="w k33" d="M280 100 H700"/>
     <path class="w kg" d="M280 130 H700"/>
     <path class="w ki" d="M280 160 H700"/>
-    <text class="s x33" x="490" y="92" text-anchor="middle">VCC from 3V3: a few mA</text>
-    <text class="s xi" x="490" y="154" text-anchor="middle">SIGNAL, read with INPUT: LOW = slot blocked</text>
+    <text class="s x33" x="490" y="92" text-anchor="middle">brown: VCC from 3V3</text>
+    <text class="s xi" x="490" y="154" text-anchor="middle">black: SIGNAL, LOW when triggered</text>
 
-    <text class="b" x="60" y="236">Plan B, only if the board does not work on 3.3 V: 5 V and a divider</text>
+    <text class="b" x="60" y="236">Plan B, if it only switches on 5 V: 5 V and a divider</text>
     <rect class="box" x="60" y="252" width="220" height="140" rx="8"/>
-    <rect x="85" y="270" width="22" height="78" rx="3" fill="#868e96"/><rect x="123" y="270" width="22" height="78" rx="3" fill="#868e96"/>
-    <text class="b" x="205" y="276" text-anchor="middle">Optical</text>
-    <text class="b" x="205" y="294" text-anchor="middle">endstop</text>
+    <rect x="75" y="266" width="100" height="30" rx="3" fill="#1d1d1d" stroke="#666"/>
+    <circle cx="186" cy="281" r="13" fill="#2b2b2b" stroke="#777"/>
+    <circle cx="92" cy="273" r="2.5" fill="#ff922b"/>
+    <text class="b" x="72" y="342">Endstop sensor</text>
     <text x="272" y="316" text-anchor="end">VCC</text><text x="272" y="346" text-anchor="end">GND</text><text x="272" y="376" text-anchor="end">SIG</text>
     <path class="w k5" d="M280 312 H420"/>
     <text class="b x5" x="428" y="317">5 V</text>
@@ -747,11 +852,11 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
     <text class="pi" x="710" y="346">GND</text><text class="pi" x="710" y="376">GPIO 1</text>
     <text class="b pi" x="790" y="324" text-anchor="middle">ESP32-S3</text>
   </svg>
-  <figcaption>Smoke test: serial monitor shows 1 with the slot open and 0 with a card in the slot. If it never changes on 3.3 V, use plan B.</figcaption>
+  <figcaption>Smoke test on the ESP32: the serial monitor shows 1 with nothing in front of the sensor and 0 with steel against the round face.</figcaption>
   </figure>
   <div class="grid2">
     <div class="callout info"><b>Position:</b> at the front of the carriage travel, towards the wheels. It marks the furthest the feeder may go: the shuttle reaches the flywheels and the mechanism does not run into them. Homing therefore moves towards the wheels and only runs with the wheels off. WHEELS sits at the release point or just behind it.</div>
-    <div class="callout warn"><b>Still open:</b> does it work on 3.3 V? Power it from the Uno's 3.3V pin and measure SIGNAL with a multimeter, slot open and blocked. Steps in <a href="06-optical-endstop.md">06-optical-endstop.md</a>.</div>
+    <div class="callout warn"><b>Still open:</b> the bench test with steel on 3.3 V and 5 V, the wire colours, and what on the prototype's carriage triggered it. If it is the inductive sensor, the new carriage needs a piece of steel that passes within about 1-2 mm of the round face at the home position.</div>
   </div>
 </section>
 
@@ -845,7 +950,7 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
       </table>
     </div>
     <div>
-      <div class="callout info"><b>★ Star point</b> next to the PSU. One wire each from: PSU output 1 -, PSU output 2 -, wheel buck -, both MOSFET modules DC-, the three DRV8825 motor GNDs, N7805 GND, servo buck GND and one ESP32 GND pin.</div>
+      <div class="callout info"><b>★ Star point</b> next to the PSU. The two PSU outputs are isolated from each other (measured), so this is the only link between the 24 V side and the wheel side: without it the wheel PWM has no reference. One wire each from: PSU output 1 -, PSU output 2 -, wheel buck -, both MOSFET modules DC-, the three DRV8825 motor GNDs, N7805 GND, servo buck GND and one ESP32 GND pin.</div>
       <div class="callout warn"><b>Power-up order:</b> ESP32 first (it is up as soon as the PSU is), then the wheel switch. Power-down in reverse. The ENABLE pull-up and the wheel PWM pull-downs keep everything off if the order is not respected.</div>
     </div>
   </div>
@@ -857,7 +962,7 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
   <p class="lead">One subsystem at a time; each step ends with the smoke test in its .md file.</p>
   <ol class="build">
     <li><b>ESP32 alone</b> on USB: LED blink, serial, PSRAM check, Wi-Fi scan. Find out which port is COM and which GPIO the RGB LED is on. <a href="01-esp32-s3-basics.md">01-esp32-s3-basics.md</a></li>
-    <li><b>Optical endstop</b> on 3V3: confirm it still reads LOW when blocked. <a href="06-optical-endstop.md">06-optical-endstop.md</a></li>
+    <li><b>Endstop sensor</b>: bench test with the Uno and a multimeter (section 7), then on the ESP32: confirm it reads LOW with steel in front of it. <a href="06-optical-endstop.md">06-optical-endstop.md</a></li>
     <li><b>One DRV8825 + pan stepper</b> on the 24 V rail, then tilt, then feeder. <a href="02-steppers-drv8825.md">02-steppers-drv8825.md</a></li>
     <li><b>Both servos</b> on their own 5-6 V rail; check the four angles. <a href="03-servos.md">03-servos.md</a></li>
     <li><b>Launch wheels</b> with bare shafts, ideally after the 12 V buck is fitted and measured. <a href="04-launch-wheels-dc-motors.md">04-launch-wheels-dc-motors.md</a></li>
@@ -870,9 +975,8 @@ svg text.star { font-size: 22px; fill: var(--gnd); }
   <h2><span class="n">10</span>Still open</h2>
   <p class="lead">Questions that still affect wiring or firmware. The full list is at the end of <a href="../PARTS.md">PARTS.md</a>.</p>
   <ul>
-    <li>Optical endstop: does SIGNAL swing between about 3.3 V and 0 V when powered from 3.3 V?</li>
-    <li>PSU: photo of the label, mains switch, fan; optionally whether the two output negatives are joined inside.</li>
-    <li>MOSFET module: resistance between DC+ and OUT+ (expected about 0 Ω).</li>
+    <li>Endstop sensor: bench test with steel against the round face, on 3.3 V and on 5 V (section 7); wire colours; what on the carriage triggered it.</li>
+    <li>PSU: photo of the label, mains switch, fan.</li>
   </ul>
 </section>
 
@@ -910,7 +1014,7 @@ const J3 = [
   ['GND', 'gnd', 'GND', 'to the star point'],
   ['TX', 'no', null, 'GPIO 43, serial: never'],
   ['RX', 'no', null, 'GPIO 44, serial: never'],
-  ['1', 'in', 'FEED_HOME', 'optical endstop SIGNAL'],
+  ['1', 'in', 'FEED_HOME', 'endstop sensor SIGNAL'],
   ['2', 'res', 'LIMIT_PAN', 'reserved: pan home sensor'],
   ['42', 'res', 'LIMIT_TILT', 'reserved: tilt home sensor'],
   ['41', 'res', 'ESTOP_IN', 'reserved: E-STOP contact'],

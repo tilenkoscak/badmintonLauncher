@@ -3,8 +3,11 @@
 Draft based on the salvaged **Artillery Sidewinder X3 Plus** power supply, which has two
 outputs: **24 V / 4.2 A** and **36 V / 9.7 A**. The robot is mains-powered.
 
-> ❓ **OPEN:** Before I mark this page final I need (see `PARTS.md` #6, #7): the PSU model
-> label and whether the negatives of the two outputs are already connected inside the PSU.
+The negatives of the two outputs are **not** connected inside the PSU (measured 2026-10-21),
+so the star point below is what joins the two sides.
+
+> ❓ **OPEN:** Before I mark this page final I need a photo of the PSU label (model and
+> ratings) and whether it has a mains switch and a fan (`PARTS.md` #6).
 
 ## Power tree
 
@@ -62,9 +65,11 @@ is still fitted, see `04-launch-wheels-dc-motors.md`.
   (`controller/README.md`). Optional later: a relay on the 24 V aim & feed rail driven
   by the ESP32.
 - **Never route motor current through the ESP32 board** or through a breadboard.
-- **Common ground, once.** Both PSU outputs, the buck and the ESP32 meet at the star point.
-  If the multimeter shows the two PSU negatives already connected, still run separate wires to
-  the star; just do not be surprised by the continuity.
+- **Common ground, once, and it is essential.** Both PSU outputs, the buck and the ESP32 meet
+  at the star point. The two outputs are isolated from each other inside the PSU (measured),
+  so this point is the only link between the 24 V side and the wheel side: without it the
+  ESP32's wheel PWM has no reference at the MOSFET modules and the wheels can misbehave. Each
+  output's - gets its own wire to the star, as thick as that output's + wire.
 - **Flyback diodes:** each E83-004 sits across its motor and carries the motor current only
   during the PWM off-time, 1–2 W. A small heatsink is plenty; the tab is the cathode, so use
   insulating washers if it shares a heatsink.

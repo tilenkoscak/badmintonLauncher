@@ -50,7 +50,8 @@ collected in the checklist at the end of `PARTS.md`.
    the ESP32 (STEP, DIR, PWM) at 3.3 V are fine for the DRV8825, the servos and the MOSFET
    modules (trigger 3.3–20 V). The optical endstop is the one input that needs care.
 2. **One common ground.** ESP32 GND, driver logic GND, MOSFET module GND and both PSU outputs
-   must be connected at the star point, otherwise STEP/DIR/PWM have no reference.
+   must be connected at the star point, otherwise STEP/DIR/PWM have no reference. The two PSU
+   outputs are isolated from each other inside the PSU, so this is the only link between them.
 3. **Motor current never flows through the ESP32 board.** The ESP32's GND pins carry only
    signal return current. Motors get their own ground wires to the star point.
 4. **Never plug or unplug a stepper while the driver has VMOT.** It kills DRV8825s instantly.
